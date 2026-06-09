@@ -13,13 +13,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ options, setOptions, onResetSh
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
 
-    let parsedValue: any = value;
+    let parsedValue: string | number | boolean = value;
     if (type === 'checkbox') {
       parsedValue = (e.target as HTMLInputElement).checked;
     } else if (name === 'decks' || name === 'minBet' || name === 'balance') {
       parsedValue = parseInt(value, 10) || 0;
     } else if (name === 'blackjackPayout') {
       parsedValue = parseFloat(value);
+    } else if (name === 'countingSystem') {
+      parsedValue = value;
     }
 
     setOptions((prev) => ({
@@ -114,6 +116,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ options, setOptions, onResetSh
 
           <div className="flex flex-col gap-2 border-t border-gray-600 pt-4 mt-2">
             <label className="text-sm font-medium text-blue-300">Bankroll & Betting</label>
+            <div className="flex flex-col gap-1 mb-2">
+              <label className="text-xs text-gray-400">Counting System</label>
+              <select
+                name="countingSystem"
+                value={options.countingSystem}
+                onChange={handleChange}
+                className="bg-gray-700 text-white p-2 rounded w-full"
+              >
+                <option value="Hi-Lo">Hi-Lo (Standard)</option>
+                <option value="Wong Halves">Wong Halves (High Precision)</option>
+              </select>
+            </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs text-gray-400">Balance</label>
               <input
