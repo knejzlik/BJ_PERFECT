@@ -2,6 +2,8 @@ export type Card = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'T' | 'J' | '
 
 export type Shoe = Record<Card, number>;
 
+export type CountingSystem = 'Hi-Lo' | 'Wong Halves';
+
 export interface GameOptions {
   decks: number;
   standOnSoft17: boolean; // true for S17, false for H17
@@ -10,6 +12,7 @@ export interface GameOptions {
   blackjackPayout: number; // e.g., 1.5 for 3:2, 1.2 for 6:5
   minBet: number;
   balance: number;
+  countingSystem: CountingSystem;
 }
 
 export interface Hand {

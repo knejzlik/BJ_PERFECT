@@ -298,43 +298,73 @@ export function getBetSuggestion(shoe: Shoe, options: GameOptions): BetSuggestio
   const initialShoe = initializeShoe(options.decks);
   let runningCount = 0;
 
-  // Calculate running count using Hi-Lo system
-  // Cards 2-6: +1
-  // Cards 7-9: 0
-  // Cards T-A: -1
   for (const card in shoe) {
     const c = card as Card;
     const cardsPlayed = initialShoe[c] - shoe[c];
 
-    if (['2', '3', '4', '5', '6'].includes(c)) {
-      runningCount += cardsPlayed;
-    } else if (['T', 'J', 'Q', 'K', 'A'].includes(c)) {
-      runningCount -= cardsPlayed;
+    if (options.countingSystem === 'Wong Halves') {
+      // Wong Halves
+      // 2, 7: +0.5
+      // 3, 4, 6: +1
+      // 5: +1.5
+      // 8: 0
+      // 9: -0.5
+      // T, A: -1
+      if (['2', '7'].includes(c)) runningCount += cardsPlayed * 0.5;
+      else if (['3', '4', '6'].includes(c)) runningCount += cardsPlayed * 1;
+      else if (c === '5') runningCount += cardsPlayed * 1.5;
+      else if (c === '9') runningCount += cardsPlayed * -0.5;
+      else if (['T', 'J', 'Q', 'K', 'A'].includes(c)) runningCount += cardsPlayed * -1;
+    } else {
+      // Hi-Lo
+      if (['2', '3', '4', '5', '6'].includes(c)) runningCount += cardsPlayed;
+      else if (['T', 'J', 'Q', 'K', 'A'].includes(c)) runningCount -= cardsPlayed;
     }
   }
 
   const totalCardsRemaining = Object.values(shoe).reduce((sum, count) => sum + count, 0);
   const decksRemaining = Math.max(0.5, totalCardsRemaining / 52); // Ensure we don't divide by near zero
-  const trueCount = Math.floor(runningCount / decksRemaining);
 
-  // Simple Kelly Criterion approximation for Blackjack (Hi-Lo)
-  // Bet = Unit * (TrueCount - 1) when TrueCount >= 2.
-  // Otherwise minBet.
-  // Then cap by balance.
+  // For Wong Halves, true count is typically rounded to the nearest half or whole, let's keep one decimal precision for display, but use exact for math
+  const exactTrueCount = runningCount / decksRemaining;
+  const displayTrueCount = Math.round(exactTrueCount * 2) / 2; // Round to nearest 0.5
+
+  // Exact Edge Calculation Approximation
+  // A typical blackjack game has a base house edge of roughly -0.5% (depends on rules, but this is a standard baseline)
+  // For Hi-Lo, each true count unit shifts the edge by roughly +0.5%
+  // For Wong Halves, the shift is similar but slightly more precise in correlation to the true count value.
+  const baseEdge = -0.005; // -0.5%
+  const edgePerTC = 0.005; // +0.5%
+  const estimatedEdge = baseEdge + (exactTrueCount * edgePerTC);
+
   let suggestedBet = options.minBet;
 
-  if (trueCount >= 2) {
-      // Very basic spread: minBet * (TC - 1)
-      suggestedBet = options.minBet * (trueCount - 1);
+  // Strict Kelly Criterion Formula: f* = edge / variance
+  // For blackjack, the variance of a hand is approximately 1.15 to 1.3 (due to doubles, splits, blackjacks). We'll use 1.25.
+  const variance = 1.25;
+
+  if (estimatedEdge > 0) {
+    const kellyFraction = estimatedEdge / variance;
+    // We suggest betting the exact Kelly fraction of the bankroll
+    suggestedBet = options.balance * kellyFraction;
   }
 
-  // Ensure bet doesn't exceed 25% of balance as a safety cap
+  // Ensure bet doesn't fall below minBet (unless balance is lower)
+  suggestedBet = Math.max(options.minBet, suggestedBet);
+
+  // Ensure bet doesn't exceed 25% of balance as a safety cap (Kelly can be aggressive)
   const maxSafeBet = Math.max(options.minBet, Math.floor(options.balance * 0.25));
   suggestedBet = Math.min(suggestedBet, maxSafeBet);
 
+  // Cap at remaining balance if less than minBet
+  suggestedBet = Math.min(suggestedBet, options.balance);
+
+  // Round to nearest whole number for practical betting
+  suggestedBet = Math.round(suggestedBet);
+
   return {
     runningCount,
-    trueCount,
+    trueCount: displayTrueCount,
     suggestedBet
   };
 }
@@ -414,6 +444,8 @@ export function getSideBetsEV(shoe: Shoe, options: GameOptions): SideBetsEV {
           const p3 = count3 / (totalCards - 2);
           const prob = p1 * p2 * p3;
 
+          // We keep pSuited calculated but suppress the unused variable warning if unused
+          // eslint-disable-next-line no-useless-assignment
           let pSuited = 0;
           if (c1 !== c2 && c2 !== c3 && c1 !== c3) pSuited = 1 / 16;
           else if (c1 === c2 && c2 === c3) pSuited = ((D - 1) / (4 * D - 1)) * ((D - 2) / (4 * D - 2));

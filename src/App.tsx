@@ -16,6 +16,7 @@ const DEFAULT_OPTIONS: GameOptions = {
   blackjackPayout: 1.5, // 3:2
   minBet: 10,
   balance: 1000,
+  countingSystem: 'Hi-Lo',
 };
 
 const INITIAL_STATE: GameState = {
@@ -64,6 +65,7 @@ function App() {
     const isTableEmpty = gameState.dealerCards.length === 0 && activeHand.cards.length === 0;
 
     if (dealerUpcard && activeHand && activeHand.cards.length >= 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsCalculating(true);
       workerRef.current?.postMessage({
         type: 'bestMove',
