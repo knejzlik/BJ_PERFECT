@@ -19,6 +19,7 @@ export interface Hand {
 export interface GameState {
   dealerCards: Card[];
   playerHands: Hand[];
+  discardCards: Card[];
   activeHandIndex: number;
   shoe: Shoe;
   options: GameOptions;
