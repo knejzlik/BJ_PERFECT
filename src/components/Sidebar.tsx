@@ -16,8 +16,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ options, setOptions, onResetSh
     let parsedValue: any = value;
     if (type === 'checkbox') {
       parsedValue = (e.target as HTMLInputElement).checked;
-    } else if (name === 'decks') {
-      parsedValue = parseInt(value, 10);
+    } else if (name === 'decks' || name === 'minBet' || name === 'balance') {
+      parsedValue = parseInt(value, 10) || 0;
     } else if (name === 'blackjackPayout') {
       parsedValue = parseFloat(value);
     }
@@ -110,6 +110,34 @@ export const Sidebar: React.FC<SidebarProps> = ({ options, setOptions, onResetSh
               <option value={1.2}>6:5 (1.2x)</option>
               <option value={1.0}>1:1 (1.0x)</option>
             </select>
+          </div>
+
+          <div className="flex flex-col gap-2 border-t border-gray-600 pt-4 mt-2">
+            <label className="text-sm font-medium text-blue-300">Bankroll & Betting</label>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-400">Balance</label>
+              <input
+                type="number"
+                name="balance"
+                value={options.balance}
+                onChange={handleChange}
+                className="bg-gray-700 text-white p-2 rounded w-full"
+                min="0"
+                step="10"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-400">Min Bet</label>
+              <input
+                type="number"
+                name="minBet"
+                value={options.minBet}
+                onChange={handleChange}
+                className="bg-gray-700 text-white p-2 rounded w-full"
+                min="1"
+                step="1"
+              />
+            </div>
           </div>
         </div>
 

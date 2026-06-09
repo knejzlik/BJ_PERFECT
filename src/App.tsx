@@ -6,12 +6,16 @@ import { ActionAdvisor } from './components/ActionAdvisor';
 import { type BestMoveResult } from './engine/blackjackEngine';
 import { useEffect, useRef } from 'react';
 
+import { getBetSuggestion } from './engine/blackjackEngine';
+
 const DEFAULT_OPTIONS: GameOptions = {
   decks: 6,
   standOnSoft17: true, // S17
   doubleAfterSplit: true, // DAS
   surrenderAllowed: true,
   blackjackPayout: 1.5, // 3:2
+  minBet: 10,
+  balance: 1000,
 };
 
 const INITIAL_STATE: GameState = {
@@ -324,7 +328,11 @@ function App() {
 
           {/* Action Advisor Area (Side on Desktop, Bottom in Scroll on Mobile/Tablet) */}
           <div className="xl:w-80 bg-gray-800 border-t xl:border-t-0 xl:border-l border-gray-700 shadow-xl shrink-0">
-             <ActionAdvisor bestMove={bestMove} isLoading={isCalculating} />
+             <ActionAdvisor
+               bestMove={bestMove}
+               betSuggestion={getBetSuggestion(gameState.shoe, gameState.options)}
+               isLoading={isCalculating}
+             />
           </div>
         </div>
       </div>

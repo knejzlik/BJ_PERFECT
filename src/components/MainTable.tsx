@@ -55,7 +55,7 @@ export const MainTable: React.FC<MainTableProps> = ({
   );
 
   const renderKeyboard = (onAdd: (card: Card) => void, active: boolean) => (
-    <div className={`flex flex-wrap justify-center gap-1 mt-2 transition-opacity ${active ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}>
+    <div className={`flex flex-wrap justify-center gap-1 md:gap-2 mt-2 transition-opacity ${active ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}>
       {CARDS.map((card) => {
         const count = shoe[card];
         const isEmpty = count === 0;
@@ -64,7 +64,7 @@ export const MainTable: React.FC<MainTableProps> = ({
             key={card}
             onClick={() => onAdd(card)}
             disabled={isEmpty}
-            className={`w-8 h-10 sm:w-10 sm:h-12 rounded shadow-sm text-sm sm:text-base font-bold flex items-center justify-center transition-transform active:scale-95 ${
+            className={`w-8 h-10 sm:w-10 sm:h-12 md:w-14 md:h-16 rounded shadow-sm text-sm sm:text-base md:text-xl font-bold flex items-center justify-center transition-transform active:scale-95 ${
               isEmpty
                 ? 'bg-gray-700/50 text-gray-400 cursor-not-allowed'
                 : 'bg-white/90 text-gray-900 hover:bg-white'
@@ -114,11 +114,20 @@ export const MainTable: React.FC<MainTableProps> = ({
       <div className="flex flex-col items-center mb-6 w-full">
         <h2 className="text-sm md:text-xl font-bold text-white mb-2 tracking-wider uppercase opacity-80">Other Players (Discard)</h2>
         <div className="flex flex-col items-center p-2 bg-black/20 rounded-xl w-full max-w-4xl">
-          <div className="flex flex-wrap gap-1 md:gap-2 justify-center items-center min-h-[4.5rem] md:min-h-[7rem]">
-            {discardCards.length === 0 && <span className="text-white/30 text-sm">No cards</span>}
-            {discardCards.map((card, idx) => renderCard(card, idx, () => onRemoveDiscardCard(idx)))}
+          <div className="flex items-center justify-between w-full px-4 py-2 bg-black/30 rounded-lg mb-2">
+            <span className="text-white font-medium text-sm md:text-lg">
+              Discarded Cards: <span className="font-bold text-yellow-400 ml-2">{discardCards.length}</span>
+            </span>
+            {discardCards.length > 0 && (
+              <button
+                onClick={() => onRemoveDiscardCard(discardCards.length - 1)}
+                className="text-red-400 hover:text-red-300 text-xs md:text-sm font-bold border border-red-500/30 hover:bg-red-500/10 px-3 py-1 rounded transition-colors"
+              >
+                Undo Last Discard
+              </button>
+            )}
           </div>
-          <div className="mt-2 pt-2 border-t border-white/10 w-full">
+          <div className="pt-2 border-t border-white/10 w-full">
              {renderKeyboard(onAddDiscardCard, true)}
           </div>
         </div>

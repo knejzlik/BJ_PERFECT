@@ -273,6 +273,59 @@ export interface BestMoveResult {
   bestEV: number;
 }
 
+export interface BetSuggestion {
+  runningCount: number;
+  trueCount: number;
+  suggestedBet: number;
+}
+
+import { initializeShoe } from '../types';
+
+export function getBetSuggestion(shoe: Shoe, options: GameOptions): BetSuggestion {
+  const initialShoe = initializeShoe(options.decks);
+  let runningCount = 0;
+
+  // Calculate running count using Hi-Lo system
+  // Cards 2-6: +1
+  // Cards 7-9: 0
+  // Cards T-A: -1
+  for (const card in shoe) {
+    const c = card as Card;
+    const cardsPlayed = initialShoe[c] - shoe[c];
+
+    if (['2', '3', '4', '5', '6'].includes(c)) {
+      runningCount += cardsPlayed;
+    } else if (['T', 'J', 'Q', 'K', 'A'].includes(c)) {
+      runningCount -= cardsPlayed;
+    }
+  }
+
+  const totalCardsRemaining = Object.values(shoe).reduce((sum, count) => sum + count, 0);
+  const decksRemaining = Math.max(0.5, totalCardsRemaining / 52); // Ensure we don't divide by near zero
+  const trueCount = Math.floor(runningCount / decksRemaining);
+
+  // Simple Kelly Criterion approximation for Blackjack (Hi-Lo)
+  // Bet = Unit * (TrueCount - 1) when TrueCount >= 2.
+  // Otherwise minBet.
+  // Then cap by balance.
+  let suggestedBet = options.minBet;
+
+  if (trueCount >= 2) {
+      // Very basic spread: minBet * (TC - 1)
+      suggestedBet = options.minBet * (trueCount - 1);
+  }
+
+  // Ensure bet doesn't exceed 25% of balance as a safety cap
+  const maxSafeBet = Math.max(options.minBet, Math.floor(options.balance * 0.25));
+  suggestedBet = Math.min(suggestedBet, maxSafeBet);
+
+  return {
+    runningCount,
+    trueCount,
+    suggestedBet
+  };
+}
+
 export function getBestMove(
   playerHand: Card[],
   dealerUpcard: Card,
