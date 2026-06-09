@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { type GameState, type GameOptions, initializeShoe, type Card } from './types';
 import { Sidebar } from './components/Sidebar';
 import { MainTable } from './components/MainTable';
-import { DeckTracker } from './components/DeckTracker';
 import { ActionAdvisor } from './components/ActionAdvisor';
 import { type BestMoveResult } from './engine/blackjackEngine';
 import { useEffect, useRef } from 'react';
@@ -28,8 +27,6 @@ function App() {
   const [gameState, setGameState] = useState<GameState>(INITIAL_STATE);
 
   // UI State
-  const [trackerMode, setTrackerMode] = useState<'REMOVE' | 'ADD'>('REMOVE');
-  const [activeSlot, setActiveSlot] = useState<{ type: 'dealer' | 'player' | 'discard', handIndex?: number } | null>({ type: 'player', handIndex: 0 });
   const [bestMove, setBestMove] = useState<BestMoveResult | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -97,108 +94,120 @@ function App() {
       options: prev.options,
       shoe: initializeShoe(prev.options.decks),
     }));
-    setActiveSlot({ type: 'player', handIndex: 0 });
   };
 
-  const handleCardClick = (card: Card) => {
-    setGameState((prev) => {
-      const newState = { ...prev };
+  const handleAddDealerCard = (card: Card) => {
+    setGameState(prev => {
+      if (prev.shoe[card] <= 0) return prev;
+      return {
+        ...prev,
+        shoe: { ...prev.shoe, [card]: prev.shoe[card] - 1 },
+        dealerCards: [...prev.dealerCards, card]
+      };
+    });
+  };
+
+  const handleRemoveDealerCard = (index: number) => {
+    setGameState(prev => {
+      const card = prev.dealerCards[index];
+      const newDealerCards = [...prev.dealerCards];
+      newDealerCards.splice(index, 1);
+      return {
+        ...prev,
+        shoe: { ...prev.shoe, [card]: prev.shoe[card] + 1 },
+        dealerCards: newDealerCards
+      };
+    });
+  };
+
+  const handleAddDiscardCard = (card: Card) => {
+    setGameState(prev => {
+      if (prev.shoe[card] <= 0) return prev;
+      return {
+        ...prev,
+        shoe: { ...prev.shoe, [card]: prev.shoe[card] - 1 },
+        discardCards: [...prev.discardCards, card]
+      };
+    });
+  };
+
+  const handleRemoveDiscardCard = (index: number) => {
+    setGameState(prev => {
+      const card = prev.discardCards[index];
+      const newDiscardCards = [...prev.discardCards];
+      newDiscardCards.splice(index, 1);
+      return {
+        ...prev,
+        shoe: { ...prev.shoe, [card]: prev.shoe[card] + 1 },
+        discardCards: newDiscardCards
+      };
+    });
+  };
+
+  const handleAddPlayerCard = (handIndex: number, card: Card) => {
+    setGameState(prev => {
+      if (prev.shoe[card] <= 0) return prev;
+      const newHands = [...prev.playerHands];
+      newHands[handIndex] = {
+        ...newHands[handIndex],
+        cards: [...newHands[handIndex].cards, card]
+      };
+      return {
+        ...prev,
+        shoe: { ...prev.shoe, [card]: prev.shoe[card] - 1 },
+        playerHands: newHands,
+        activeHandIndex: handIndex
+      };
+    });
+  };
+
+  const handleRemovePlayerCard = (handIndex: number, cardIndex: number) => {
+    setGameState(prev => {
+      const card = prev.playerHands[handIndex].cards[cardIndex];
+      const newHands = [...prev.playerHands];
+      const newCards = [...newHands[handIndex].cards];
+      newCards.splice(cardIndex, 1);
+      newHands[handIndex] = { ...newHands[handIndex], cards: newCards };
+      return {
+        ...prev,
+        shoe: { ...prev.shoe, [card]: prev.shoe[card] + 1 },
+        playerHands: newHands
+      };
+    });
+  };
+
+  const handleNextRound = () => {
+    setGameState(prev => {
+      // Move all cards from table into discard pile implicitly (they just stay in the discard pile logically, but let's visually clear them)
+      // Actually, standard is discard pile grows. So let's push all current cards to discardCards.
+      const allPlayerCards = prev.playerHands.flatMap(h => h.cards);
+      return {
+        ...prev,
+        dealerCards: [],
+        playerHands: [{ cards: [], bet: 1, isSplitHand: false }],
+        discardCards: [...prev.discardCards, ...prev.dealerCards, ...allPlayerCards],
+        activeHandIndex: 0
+      };
+    });
+  };
+
+  const handleClearTable = () => {
+    setGameState(prev => {
+      // Return ALL cards (dealer, player, discard) to the shoe
+      const allPlayerCards = prev.playerHands.flatMap(h => h.cards);
+      const allCards = [...prev.dealerCards, ...allPlayerCards, ...prev.discardCards];
+
       const newShoe = { ...prev.shoe };
+      allCards.forEach(c => newShoe[c]++);
 
-      if (trackerMode === 'REMOVE') {
-        if (!activeSlot) return prev;
-        if (newShoe[card] <= 0) return prev; // Cannot remove if 0
-
-        newShoe[card]--;
-
-        if (activeSlot.type === 'dealer') {
-          newState.dealerCards = [...prev.dealerCards, card];
-        } else if (activeSlot.type === 'player' && activeSlot.handIndex !== undefined) {
-          const newHands = [...prev.playerHands];
-          newHands[activeSlot.handIndex] = {
-            ...newHands[activeSlot.handIndex],
-            cards: [...newHands[activeSlot.handIndex].cards, card],
-          };
-          newState.playerHands = newHands;
-        } else if (activeSlot.type === 'discard') {
-          newState.discardCards = [...prev.discardCards, card];
-        }
-      } else if (trackerMode === 'ADD') {
-        // Find if this card is on the table, and remove it, putting it back in shoe
-        // This is a bit tricky: do we just add to shoe, or remove from table?
-        // The spec says: "Pokud je aktivní mód ADD, kliknutí na kartu v trackeru ji vrátí do balíčku a smaže ji ze stolu."
-        // We need to figure out WHERE to remove it from.
-        // Let's remove from the active slot if it exists there, or just the last occurrence.
-
-        let removedFromTable = false;
-
-        if (activeSlot?.type === 'dealer') {
-           const idx = newState.dealerCards.lastIndexOf(card);
-           if (idx !== -1) {
-             newState.dealerCards = [...newState.dealerCards];
-             newState.dealerCards.splice(idx, 1);
-             removedFromTable = true;
-           }
-        } else if (activeSlot?.type === 'player' && activeSlot.handIndex !== undefined) {
-           const handCards = newState.playerHands[activeSlot.handIndex].cards;
-           const idx = handCards.lastIndexOf(card);
-           if (idx !== -1) {
-             const newHands = [...newState.playerHands];
-             const newCards = [...handCards];
-             newCards.splice(idx, 1);
-             newHands[activeSlot.handIndex] = { ...newHands[activeSlot.handIndex], cards: newCards };
-             newState.playerHands = newHands;
-             removedFromTable = true;
-           }
-        } else if (activeSlot?.type === 'discard') {
-           const idx = newState.discardCards.lastIndexOf(card);
-           if (idx !== -1) {
-             newState.discardCards = [...newState.discardCards];
-             newState.discardCards.splice(idx, 1);
-             removedFromTable = true;
-           }
-        }
-
-        // If we didn't remove from active slot, try to find any occurrence starting from discard, then dealer, then player hands.
-        if (!removedFromTable) {
-           const discardIdx = newState.discardCards.lastIndexOf(card);
-           if (discardIdx !== -1) {
-             newState.discardCards = [...newState.discardCards];
-             newState.discardCards.splice(discardIdx, 1);
-             removedFromTable = true;
-           } else {
-             const dealerIdx = newState.dealerCards.lastIndexOf(card);
-             if (dealerIdx !== -1) {
-               newState.dealerCards = [...newState.dealerCards];
-               newState.dealerCards.splice(dealerIdx, 1);
-               removedFromTable = true;
-             } else {
-               for (let i = newState.playerHands.length - 1; i >= 0; i--) {
-                  const hCards = newState.playerHands[i].cards;
-                  const hIdx = hCards.lastIndexOf(card);
-                  if (hIdx !== -1) {
-                    const newHands = [...newState.playerHands];
-                    const newCards = [...hCards];
-                    newCards.splice(hIdx, 1);
-                    newHands[i] = { ...newHands[i], cards: newCards };
-                    newState.playerHands = newHands;
-                    removedFromTable = true;
-                    break;
-                  }
-               }
-             }
-           }
-        }
-
-        if (removedFromTable) {
-            newShoe[card]++;
-        } else {
-            // Cannot remove from table as it's not there, maybe just do nothing.
-            return prev;
-        }
-      }
-
-      return { ...newState, shoe: newShoe };
+      return {
+        ...prev,
+        dealerCards: [],
+        playerHands: [{ cards: [], bet: 1, isSplitHand: false }],
+        discardCards: [],
+        activeHandIndex: 0,
+        shoe: newShoe
+      };
     });
   };
 
@@ -225,13 +234,11 @@ function App() {
         activeHandIndex: handIndex, // First split hand is active
       };
     });
-    setActiveSlot({ type: 'player', handIndex });
   };
 
   const handleNextHand = () => {
     setGameState((prev) => {
       const nextIndex = (prev.activeHandIndex + 1) % prev.playerHands.length;
-      setActiveSlot({ type: 'player', handIndex: nextIndex });
       return { ...prev, activeHandIndex: nextIndex };
     });
   };
@@ -264,14 +271,21 @@ function App() {
           {/* Main Table Area */}
           <div className="flex-1 flex flex-col relative overflow-hidden">
             <MainTable
+              shoe={gameState.shoe}
               dealerCards={gameState.dealerCards}
               playerHands={gameState.playerHands}
               discardCards={gameState.discardCards}
               activeHandIndex={gameState.activeHandIndex}
-              activeSlot={activeSlot}
-              setActiveSlot={setActiveSlot}
               onSplit={handleSplit}
               onNextHand={handleNextHand}
+              onAddDealerCard={handleAddDealerCard}
+              onRemoveDealerCard={handleRemoveDealerCard}
+              onAddDiscardCard={handleAddDiscardCard}
+              onRemoveDiscardCard={handleRemoveDiscardCard}
+              onAddPlayerCard={handleAddPlayerCard}
+              onRemovePlayerCard={handleRemovePlayerCard}
+              onClearTable={handleClearTable}
+              onNextRound={handleNextRound}
             />
 
             {/* Insurance Detector */}
@@ -312,16 +326,6 @@ function App() {
           <div className="xl:w-80 bg-gray-800 border-t xl:border-t-0 xl:border-l border-gray-700 shadow-xl shrink-0">
              <ActionAdvisor bestMove={bestMove} isLoading={isCalculating} />
           </div>
-        </div>
-
-        {/* Bottom Deck Tracker */}
-        <div className="shrink-0 bg-gray-900 z-10">
-          <DeckTracker
-            shoe={gameState.shoe}
-            mode={trackerMode}
-            setMode={setTrackerMode}
-            onCardClick={handleCardClick}
-          />
         </div>
       </div>
     </div>
