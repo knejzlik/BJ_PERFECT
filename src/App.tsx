@@ -18,6 +18,7 @@ const DEFAULT_OPTIONS: GameOptions = {
 const INITIAL_STATE: GameState = {
   dealerCards: [],
   playerHands: [{ cards: [], bet: 1, isSplitHand: false }],
+  discardCards: [],
   activeHandIndex: 0,
   shoe: initializeShoe(DEFAULT_OPTIONS.decks),
   options: DEFAULT_OPTIONS,
@@ -28,9 +29,10 @@ function App() {
 
   // UI State
   const [trackerMode, setTrackerMode] = useState<'REMOVE' | 'ADD'>('REMOVE');
-  const [activeSlot, setActiveSlot] = useState<{ type: 'dealer' | 'player', handIndex?: number } | null>({ type: 'player', handIndex: 0 });
+  const [activeSlot, setActiveSlot] = useState<{ type: 'dealer' | 'player' | 'discard', handIndex?: number } | null>({ type: 'player', handIndex: 0 });
   const [bestMove, setBestMove] = useState<BestMoveResult | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const workerRef = useRef<Worker | null>(null);
 
   useEffect(() => {
@@ -118,6 +120,8 @@ function App() {
             cards: [...newHands[activeSlot.handIndex].cards, card],
           };
           newState.playerHands = newHands;
+        } else if (activeSlot.type === 'discard') {
+          newState.discardCards = [...prev.discardCards, card];
         }
       } else if (trackerMode === 'ADD') {
         // Find if this card is on the table, and remove it, putting it back in shoe
@@ -146,31 +150,42 @@ function App() {
              newState.playerHands = newHands;
              removedFromTable = true;
            }
+        } else if (activeSlot?.type === 'discard') {
+           const idx = newState.discardCards.lastIndexOf(card);
+           if (idx !== -1) {
+             newState.discardCards = [...newState.discardCards];
+             newState.discardCards.splice(idx, 1);
+             removedFromTable = true;
+           }
         }
 
-        // If we didn't remove from active slot, maybe try to find any occurrence? Or just add it back if it's less than max
+        // If we didn't remove from active slot, try to find any occurrence starting from discard, then dealer, then player hands.
         if (!removedFromTable) {
-           // We could just add it back to the shoe without removing from table if not found in active slot,
-           // but the prompt says "smaže ji ze stolu".
-           // Let's just find the first occurrence from end of dealer, then player hands.
-           const dealerIdx = newState.dealerCards.lastIndexOf(card);
-           if (dealerIdx !== -1) {
-             newState.dealerCards = [...newState.dealerCards];
-             newState.dealerCards.splice(dealerIdx, 1);
+           const discardIdx = newState.discardCards.lastIndexOf(card);
+           if (discardIdx !== -1) {
+             newState.discardCards = [...newState.discardCards];
+             newState.discardCards.splice(discardIdx, 1);
              removedFromTable = true;
            } else {
-             for (let i = newState.playerHands.length - 1; i >= 0; i--) {
-                const hCards = newState.playerHands[i].cards;
-                const hIdx = hCards.lastIndexOf(card);
-                if (hIdx !== -1) {
-                  const newHands = [...newState.playerHands];
-                  const newCards = [...hCards];
-                  newCards.splice(hIdx, 1);
-                  newHands[i] = { ...newHands[i], cards: newCards };
-                  newState.playerHands = newHands;
-                  removedFromTable = true;
-                  break;
-                }
+             const dealerIdx = newState.dealerCards.lastIndexOf(card);
+             if (dealerIdx !== -1) {
+               newState.dealerCards = [...newState.dealerCards];
+               newState.dealerCards.splice(dealerIdx, 1);
+               removedFromTable = true;
+             } else {
+               for (let i = newState.playerHands.length - 1; i >= 0; i--) {
+                  const hCards = newState.playerHands[i].cards;
+                  const hIdx = hCards.lastIndexOf(card);
+                  if (hIdx !== -1) {
+                    const newHands = [...newState.playerHands];
+                    const newCards = [...hCards];
+                    newCards.splice(hIdx, 1);
+                    newHands[i] = { ...newHands[i], cards: newCards };
+                    newState.playerHands = newHands;
+                    removedFromTable = true;
+                    break;
+                  }
+               }
              }
            }
         }
@@ -223,63 +238,84 @@ function App() {
 
 
   return (
-    <div className="flex h-screen bg-gray-900 font-sans overflow-hidden">
+    <div className="flex flex-col lg:flex-row h-screen bg-gray-900 font-sans overflow-hidden">
+      {/* Mobile Header */}
+      <div className="lg:hidden flex items-center justify-between bg-gray-800 p-4 border-b border-gray-700 shrink-0">
+        <h1 className="text-white font-bold text-lg">BJ Strategist</h1>
+        <button
+          onClick={() => setIsSidebarOpen(true)}
+          className="text-gray-300 hover:text-white"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        </button>
+      </div>
+
       <Sidebar
         options={gameState.options}
         setOptions={handleOptionsChange}
         onResetShoe={resetShoe}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
       />
 
-      <div className="flex-1 flex flex-col relative">
-        <MainTable
-          dealerCards={gameState.dealerCards}
-          playerHands={gameState.playerHands}
-          activeHandIndex={gameState.activeHandIndex}
-          activeSlot={activeSlot}
-          setActiveSlot={setActiveSlot}
-          onSplit={handleSplit}
-          onNextHand={handleNextHand}
-        />
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col xl:flex-row overflow-hidden relative">
 
-        {/* Insurance Detector */}
-        {gameState.dealerCards.length > 0 && gameState.dealerCards[0] === 'A' && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-            <div className="bg-blue-900/90 border-2 border-blue-400 p-4 rounded-xl shadow-2xl flex flex-col items-center backdrop-blur-sm">
-              <h3 className="text-white font-bold text-lg mb-1 uppercase tracking-widest">Pojištění</h3>
-              {(() => {
-                const tensCount = gameState.shoe['T'] + gameState.shoe['J'] + gameState.shoe['Q'] + gameState.shoe['K'];
-                const totalCards = Object.values(gameState.shoe).reduce((a, b) => a + b, 0);
-                const prob = totalCards > 0 ? tensCount / totalCards : 0;
-                // Insurance pays 2:1. EV = (prob * 2) - ((1 - prob) * 1)
-                const ev = prob * 2 - (1 - prob);
+          {/* Main Table Area */}
+          <div className="flex-1 flex flex-col relative overflow-hidden">
+            <MainTable
+              dealerCards={gameState.dealerCards}
+              playerHands={gameState.playerHands}
+              discardCards={gameState.discardCards}
+              activeHandIndex={gameState.activeHandIndex}
+              activeSlot={activeSlot}
+              setActiveSlot={setActiveSlot}
+              onSplit={handleSplit}
+              onNextHand={handleNextHand}
+            />
 
-                return (
-                  <div className="text-center">
-                    <p className="text-blue-200 text-sm mb-2">
-                      Tens ratio: {(prob * 100).toFixed(1)}% | EV: {ev > 0 ? '+' : ''}{ev.toFixed(3)}
-                    </p>
-                    {ev > 0 ? (
-                      <div className="bg-green-500 text-black font-black px-4 py-2 rounded uppercase animate-pulse">
-                        Zkoupit pojištění
+            {/* Insurance Detector */}
+            {gameState.dealerCards.length > 0 && gameState.dealerCards[0] === 'A' && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-sm">
+                <div className="bg-blue-900/90 border-2 border-blue-400 p-2 sm:p-4 rounded-xl shadow-2xl flex flex-col items-center backdrop-blur-sm">
+                  <h3 className="text-white font-bold text-base sm:text-lg mb-1 uppercase tracking-widest">Pojištění</h3>
+                  {(() => {
+                    const tensCount = gameState.shoe['T'] + gameState.shoe['J'] + gameState.shoe['Q'] + gameState.shoe['K'];
+                    const totalCards = Object.values(gameState.shoe).reduce((a, b) => a + b, 0);
+                    const prob = totalCards > 0 ? tensCount / totalCards : 0;
+                    // Insurance pays 2:1. EV = (prob * 2) - ((1 - prob) * 1)
+                    const ev = prob * 2 - (1 - prob);
+
+                    return (
+                      <div className="text-center">
+                        <p className="text-blue-200 text-xs sm:text-sm mb-2">
+                          Tens ratio: {(prob * 100).toFixed(1)}% | EV: {ev > 0 ? '+' : ''}{ev.toFixed(3)}
+                        </p>
+                        {ev > 0 ? (
+                          <div className="bg-green-500 text-black font-black px-2 py-1 sm:px-4 sm:py-2 rounded uppercase animate-pulse text-sm sm:text-base">
+                            Zkoupit pojištění
+                          </div>
+                        ) : (
+                          <div className="bg-red-500/80 text-white font-bold px-2 py-1 sm:px-4 sm:py-2 rounded uppercase text-sm sm:text-base">
+                            Nekupovat
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="bg-red-500/80 text-white font-bold px-4 py-2 rounded uppercase">
-                        Nekupovat
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Right side panel for ActionAdvisor */}
-        <div className="absolute right-0 top-0 bottom-[140px] w-80 bg-gray-800 border-l border-gray-700 shadow-xl overflow-y-auto hidden xl:block">
-           <ActionAdvisor bestMove={bestMove} isLoading={isCalculating} />
+          {/* Action Advisor Area (Side on Desktop, Bottom in Scroll on Mobile/Tablet) */}
+          <div className="xl:w-80 bg-gray-800 border-t xl:border-t-0 xl:border-l border-gray-700 shadow-xl shrink-0">
+             <ActionAdvisor bestMove={bestMove} isLoading={isCalculating} />
+          </div>
         </div>
 
-        <div className="h-[140px]">
+        {/* Bottom Deck Tracker */}
+        <div className="shrink-0 bg-gray-900 z-10">
           <DeckTracker
             shoe={gameState.shoe}
             mode={trackerMode}
