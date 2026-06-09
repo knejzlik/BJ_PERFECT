@@ -3,7 +3,7 @@ import { type GameState, type GameOptions, initializeShoe, type Card } from './t
 import { Sidebar } from './components/Sidebar';
 import { MainTable } from './components/MainTable';
 import { ActionAdvisor } from './components/ActionAdvisor';
-import { type BestMoveResult } from './engine/blackjackEngine';
+import { type BestMoveResult, type SideBetsEV } from './engine/blackjackEngine';
 import { useEffect, useRef } from 'react';
 
 import { getBetSuggestion } from './engine/blackjackEngine';
@@ -32,6 +32,7 @@ function App() {
 
   // UI State
   const [bestMove, setBestMove] = useState<BestMoveResult | null>(null);
+  const [sideBetsEV, setSideBetsEV] = useState<SideBetsEV | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const workerRef = useRef<Worker | null>(null);
@@ -42,8 +43,14 @@ function App() {
     });
 
     workerRef.current.onmessage = (event) => {
-      setBestMove(event.data.result);
-      setIsCalculating(false);
+      const { type, result, sideBets } = event.data;
+      if (type === 'bestMove') {
+        setBestMove(result);
+        setIsCalculating(false);
+      } else if (type === 'sideBets') {
+        setSideBetsEV(sideBets);
+        setIsCalculating(false);
+      }
     };
 
     return () => {
@@ -54,17 +61,28 @@ function App() {
   useEffect(() => {
     const dealerUpcard = gameState.dealerCards[0];
     const activeHand = gameState.playerHands[gameState.activeHandIndex];
+    const isTableEmpty = gameState.dealerCards.length === 0 && activeHand.cards.length === 0;
 
     if (dealerUpcard && activeHand && activeHand.cards.length >= 2) {
       setIsCalculating(true);
       workerRef.current?.postMessage({
+        type: 'bestMove',
         playerHand: activeHand.cards,
         dealerUpcard,
         shoe: gameState.shoe,
         options: gameState.options,
       });
+    } else if (isTableEmpty) {
+      setBestMove(null);
+      setIsCalculating(true);
+      workerRef.current?.postMessage({
+        type: 'sideBets',
+        shoe: gameState.shoe,
+        options: gameState.options,
+      });
     } else {
       setBestMove(null);
+      setSideBetsEV(null);
       setIsCalculating(false);
     }
   }, [
@@ -330,6 +348,7 @@ function App() {
           <div className="xl:w-80 bg-gray-800 border-t xl:border-t-0 xl:border-l border-gray-700 shadow-xl shrink-0">
              <ActionAdvisor
                bestMove={bestMove}
+               sideBetsEV={sideBetsEV}
                betSuggestion={getBetSuggestion(gameState.shoe, gameState.options)}
                isLoading={isCalculating}
              />

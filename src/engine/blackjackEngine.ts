@@ -23,7 +23,7 @@ export function getHandValue(cards: Card[]): { total: number; isSoft: boolean } 
   return { total, isSoft: aces > 0 };
 }
 
-export type DealerProbabilities = Record<number | 'bust', number>;
+export type DealerProbabilities = Record<number | 'bust' | 'bust_3' | 'bust_4' | 'bust_5' | 'bust_6' | 'bust_7' | 'bust_8_plus', number>;
 
 export function getDealerProbabilities(
   dealerCards: Card[],
@@ -37,6 +37,12 @@ export function getDealerProbabilities(
     20: 0,
     21: 0,
     bust: 0,
+    bust_3: 0,
+    bust_4: 0,
+    bust_5: 0,
+    bust_6: 0,
+    bust_7: 0,
+    bust_8_plus: 0,
   };
 
   const totalCards = Object.values(shoe).reduce((sum, count) => sum + count, 0);
@@ -51,6 +57,13 @@ export function getDealerProbabilities(
     // Dealer rules
     if (total > 21) {
       probs.bust += currentProb;
+      const len = currentCards.length;
+      if (len === 3) probs.bust_3 += currentProb;
+      else if (len === 4) probs.bust_4 += currentProb;
+      else if (len === 5) probs.bust_5 += currentProb;
+      else if (len === 6) probs.bust_6 += currentProb;
+      else if (len === 7) probs.bust_7 += currentProb;
+      else if (len >= 8) probs.bust_8_plus += currentProb;
       return;
     }
 
@@ -324,6 +337,148 @@ export function getBetSuggestion(shoe: Shoe, options: GameOptions): BetSuggestio
     trueCount,
     suggestedBet
   };
+}
+
+export interface SideBetsEV {
+  perfectPairs: number | null;
+  twentyOnePlusThree: number | null;
+  hot3: number | null;
+  bustIt: number | null;
+}
+
+export function getSideBetsEV(shoe: Shoe, options: GameOptions): SideBetsEV {
+  const totalCards = Object.values(shoe).reduce((a, b) => a + b, 0);
+  const D = options.decks;
+  const cards = Object.keys(shoe) as Card[];
+
+  let perfectPairs: number | null = null;
+  let twentyOnePlusThree: number | null = null;
+  let hot3: number | null = null;
+  let bustIt: number | null = null;
+
+  // Perfect Pairs
+  if (totalCards >= 2) {
+    let ev = 0;
+    for (const c1 of cards) {
+      if (shoe[c1] === 0) continue;
+      const p1 = shoe[c1] / totalCards;
+      for (const c2 of cards) {
+        const count2 = c1 === c2 ? shoe[c2] - 1 : shoe[c2];
+        if (count2 <= 0) continue;
+        const p2 = count2 / (totalCards - 1);
+        const probPair = p1 * p2;
+
+        if (c1 === c2) {
+          const pPerfect = (D - 1) / (4 * D - 1);
+          const pColored = D / (4 * D - 1);
+          const pMixed = (2 * D) / (4 * D - 1);
+          ev += probPair * (25 * pPerfect + 12 * pColored + 6 * pMixed);
+        } else {
+          ev += probPair * -1;
+        }
+      }
+    }
+    perfectPairs = ev;
+  }
+
+  const isStraight = (r1: Card, r2: Card, r3: Card) => {
+    const values = [r1, r2, r3].map(c => {
+      if (c === 'A') return 1;
+      if (c === 'T') return 10;
+      if (c === 'J') return 11;
+      if (c === 'Q') return 12;
+      if (c === 'K') return 13;
+      return parseInt(c, 10);
+    }).sort((a, b) => a - b);
+    if (values[0] + 1 === values[1] && values[1] + 1 === values[2]) return true;
+    if (values[0] === 1 && values[1] === 12 && values[2] === 13) return true; // Q, K, A
+    return false;
+  };
+
+  // 21+3 & Hot 3
+  if (totalCards >= 3) {
+    let ev213 = 0;
+    let evHot3 = 0;
+    for (const c1 of cards) {
+      if (shoe[c1] === 0) continue;
+      const p1 = shoe[c1] / totalCards;
+      for (const c2 of cards) {
+        const count2 = c1 === c2 ? shoe[c2] - 1 : shoe[c2];
+        if (count2 <= 0) continue;
+        const p2 = count2 / (totalCards - 1);
+        for (const c3 of cards) {
+          let count3 = shoe[c3];
+          if (c1 === c3) count3--;
+          if (c2 === c3) count3--;
+          if (count3 <= 0) continue;
+          const p3 = count3 / (totalCards - 2);
+          const prob = p1 * p2 * p3;
+
+          let pSuited = 0;
+          if (c1 !== c2 && c2 !== c3 && c1 !== c3) pSuited = 1 / 16;
+          else if (c1 === c2 && c2 === c3) pSuited = ((D - 1) / (4 * D - 1)) * ((D - 2) / (4 * D - 2));
+          else pSuited = ((D - 1) / (4 * D - 1)) * (1 / 4);
+
+          // 21+3 logic
+          const straight = isStraight(c1, c2, c3);
+          const threeOfKind = (c1 === c2 && c2 === c3);
+          if (threeOfKind) {
+            ev213 += prob * (pSuited * 100 + (1 - pSuited) * 30);
+          } else if (straight) {
+            ev213 += prob * (pSuited * 40 + (1 - pSuited) * 10);
+          } else {
+            ev213 += prob * (pSuited * 5 + (1 - pSuited) * -1);
+          }
+
+          // Hot 3 logic
+          const val = (c: Card) => c === 'A' ? 11 : (['T', 'J', 'Q', 'K'].includes(c) ? 10 : parseInt(c, 10));
+          const total = val(c1) + val(c2) + val(c3);
+          if (c1 === '7' && c2 === '7' && c3 === '7') {
+             evHot3 += prob * 100;
+          } else if (total === 21) {
+             evHot3 += prob * (pSuited * 20 + (1 - pSuited) * 4);
+          } else if (total === 20) {
+             evHot3 += prob * 2;
+          } else if (total === 19) {
+             evHot3 += prob * 1;
+          } else {
+             evHot3 += prob * -1;
+          }
+        }
+      }
+    }
+    twentyOnePlusThree = ev213;
+    hot3 = evHot3;
+  }
+
+  // Bust It
+  if (totalCards > 0) {
+    let evBustIt = 0;
+    // We approximate Bust It by simulating from each possible upcard
+    // We limit depth heavily or simplify if needed, but since it's in a worker, we can just run it.
+    for (const upcard of cards) {
+      if (shoe[upcard] === 0) continue;
+      const probUpcard = shoe[upcard] / totalCards;
+      const shoeMinusUpcard = { ...shoe, [upcard]: shoe[upcard] - 1 };
+
+      const probs = getDealerProbabilities([upcard], shoeMinusUpcard, options);
+      const b3 = probs.bust_3 || 0;
+      const b4 = probs.bust_4 || 0;
+      const b5 = probs.bust_5 || 0;
+      const b6 = probs.bust_6 || 0;
+      const b7 = probs.bust_7 || 0;
+      const b8 = probs.bust_8_plus || 0;
+
+      const winProb = b3 + b4 + b5 + b6 + b7 + b8;
+      const loseProb = 1 - winProb;
+      const upcardEv = b3 * 1 + b4 * 2 + b5 * 9 + b6 * 50 + b7 * 100 + b8 * 250 - loseProb * 1;
+
+      evBustIt += probUpcard * upcardEv;
+    }
+    bustIt = evBustIt;
+  }
+
+  return { perfectPairs, twentyOnePlusThree, hot3, bustIt };
 }
 
 export function getBestMove(
