@@ -1,12 +1,13 @@
 import React from 'react';
-import { type BestMoveResult } from '../engine/blackjackEngine';
+import { type BestMoveResult, type BetSuggestion } from '../engine/blackjackEngine';
 
 interface ActionAdvisorProps {
   bestMove: BestMoveResult | null;
+  betSuggestion: BetSuggestion | null;
   isLoading?: boolean;
 }
 
-export const ActionAdvisor: React.FC<ActionAdvisorProps> = ({ bestMove, isLoading }) => {
+export const ActionAdvisor: React.FC<ActionAdvisorProps> = ({ bestMove, betSuggestion, isLoading }) => {
   if (isLoading) {
     return (
       <div className="p-6 flex flex-col items-center justify-center h-full text-white">
@@ -16,29 +17,19 @@ export const ActionAdvisor: React.FC<ActionAdvisorProps> = ({ bestMove, isLoadin
     );
   }
 
-  if (!bestMove) {
+  const content = () => {
+    if (!bestMove) {
+      return (
+        <div className="p-6 flex flex-col items-center justify-center h-full text-gray-400 text-center">
+          <p>Enter dealer and player cards to see the optimal strategy.</p>
+        </div>
+      );
+    }
+
+    const { bestAction, bestEV, actionEVs } = bestMove;
+
     return (
-      <div className="p-6 flex flex-col items-center justify-center h-full text-gray-400 text-center">
-        <p>Enter dealer and player cards to see the optimal strategy.</p>
-      </div>
-    );
-  }
-
-  const { bestAction, bestEV, actionEVs } = bestMove;
-
-  const actionColors: Record<string, string> = {
-    Hit: 'bg-green-500',
-    Stand: 'bg-red-500',
-    Double: 'bg-blue-500',
-    Split: 'bg-purple-500',
-    Surrender: 'bg-yellow-600',
-  };
-
-  return (
-    <div className="p-4 sm:p-6 text-white h-full flex flex-col lg:overflow-y-auto">
-      <h2 className="text-xl sm:text-2xl font-bold border-b border-gray-600 pb-2 mb-4 sm:mb-6">Action Advisor</h2>
-
-      <div className="flex-1 flex flex-col xl:block">
+      <>
         <div className="mb-6 sm:mb-8 text-center shrink-0">
           <p className="text-xs sm:text-sm text-gray-400 mb-2 uppercase tracking-wider">Recommended Action</p>
           <div className={`${actionColors[bestAction] || 'bg-gray-500'} text-3xl sm:text-4xl font-black py-4 sm:py-6 rounded-xl shadow-lg uppercase tracking-widest`}>
@@ -77,6 +68,43 @@ export const ActionAdvisor: React.FC<ActionAdvisorProps> = ({ bestMove, isLoadin
             </table>
           </div>
         </div>
+      </>
+    );
+  };
+
+  const actionColors: Record<string, string> = {
+    Hit: 'bg-green-500',
+    Stand: 'bg-red-500',
+    Double: 'bg-blue-500',
+    Split: 'bg-purple-500',
+    Surrender: 'bg-yellow-600',
+  };
+
+  return (
+    <div className="p-4 sm:p-6 text-white h-full flex flex-col lg:overflow-y-auto">
+      <h2 className="text-xl sm:text-2xl font-bold border-b border-gray-600 pb-2 mb-4">Action Advisor</h2>
+
+      {betSuggestion && (
+        <div className="mb-6 bg-gray-800 border border-blue-500/30 rounded-lg p-4 shadow-inner">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm text-gray-400">Running Count:</span>
+            <span className="font-mono text-white">{betSuggestion.runningCount > 0 ? '+' : ''}{betSuggestion.runningCount}</span>
+          </div>
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-sm text-gray-400">True Count:</span>
+            <span className="font-mono text-white">{betSuggestion.trueCount > 0 ? '+' : ''}{betSuggestion.trueCount}</span>
+          </div>
+          <div className="border-t border-gray-700 pt-3">
+            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Suggested Bet</p>
+            <div className="text-2xl font-black text-green-400">
+              ${betSuggestion.suggestedBet}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 flex flex-col xl:block">
+        {content()}
       </div>
     </div>
   );

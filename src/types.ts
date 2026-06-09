@@ -8,6 +8,8 @@ export interface GameOptions {
   doubleAfterSplit: boolean; // DAS
   surrenderAllowed: boolean;
   blackjackPayout: number; // e.g., 1.5 for 3:2, 1.2 for 6:5
+  minBet: number;
+  balance: number;
 }
 
 export interface Hand {
