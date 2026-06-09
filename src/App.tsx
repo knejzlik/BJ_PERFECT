@@ -3,10 +3,8 @@ import { type GameState, type GameOptions, initializeShoe, type Card } from './t
 import { Sidebar } from './components/Sidebar';
 import { MainTable } from './components/MainTable';
 import { ActionAdvisor } from './components/ActionAdvisor';
-import { type BestMoveResult, type SideBetsEV } from './engine/blackjackEngine';
+import { type BestMoveResult, type SideBetsEV, type BetSuggestion } from './engine/blackjackEngine';
 import { useEffect, useRef } from 'react';
-
-import { getBetSuggestion } from './engine/blackjackEngine';
 
 const DEFAULT_OPTIONS: GameOptions = {
   decks: 6,
@@ -34,6 +32,7 @@ function App() {
   // UI State
   const [bestMove, setBestMove] = useState<BestMoveResult | null>(null);
   const [sideBetsEV, setSideBetsEV] = useState<SideBetsEV | null>(null);
+  const [betSuggestion, setBetSuggestion] = useState<BetSuggestion | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const workerRef = useRef<Worker | null>(null);
@@ -44,13 +43,15 @@ function App() {
     });
 
     workerRef.current.onmessage = (event) => {
-      const { type, result, sideBets } = event.data;
+      const { type, result, sideBets, betSuggestion: suggestedBetResult } = event.data;
       if (type === 'bestMove') {
         setBestMove(result);
         setIsCalculating(false);
       } else if (type === 'sideBets') {
         setSideBetsEV(sideBets);
         setIsCalculating(false);
+      } else if (type === 'betSuggestion') {
+        setBetSuggestion(suggestedBetResult);
       }
     };
 
@@ -58,6 +59,15 @@ function App() {
       workerRef.current?.terminate();
     };
   }, []);
+
+  useEffect(() => {
+    // Also dispatch betSuggestion update when shoe or options change
+    workerRef.current?.postMessage({
+      type: 'betSuggestion',
+      shoe: gameState.shoe,
+      options: gameState.options,
+    });
+  }, [gameState.shoe, gameState.options]);
 
   useEffect(() => {
     const dealerUpcard = gameState.dealerCards[0];
@@ -351,7 +361,7 @@ function App() {
              <ActionAdvisor
                bestMove={bestMove}
                sideBetsEV={sideBetsEV}
-               betSuggestion={getBetSuggestion(gameState.shoe, gameState.options)}
+               betSuggestion={betSuggestion || { runningCount: 0, trueCount: 0, suggestedBet: gameState.options.minBet }}
                isLoading={isCalculating}
              />
           </div>
