@@ -1,25 +1,32 @@
-import { getBestMove, type BestMoveResult } from '../engine/blackjackEngine';
+import { getBestMove, getSideBetsEV, type BestMoveResult, type SideBetsEV } from '../engine/blackjackEngine';
 import { type Card, type Shoe, type GameOptions } from '../types';
 
 export interface WorkerMessageData {
-  playerHand: Card[];
-  dealerUpcard: Card;
+  type: 'bestMove' | 'sideBets';
+  playerHand?: Card[];
+  dealerUpcard?: Card;
   shoe: Shoe;
   options: GameOptions;
 }
 
 export interface WorkerResponseMessageData {
-  result: BestMoveResult;
+  type: 'bestMove' | 'sideBets';
+  result?: BestMoveResult;
+  sideBets?: SideBetsEV;
 }
 
 self.onmessage = (event: MessageEvent<WorkerMessageData>) => {
-  const { playerHand, dealerUpcard, shoe, options } = event.data;
+  const { type, playerHand, dealerUpcard, shoe, options } = event.data;
 
   try {
-    const result = getBestMove(playerHand, dealerUpcard, shoe, options);
-    self.postMessage({ result });
+    if (type === 'bestMove' && playerHand && dealerUpcard) {
+      const result = getBestMove(playerHand, dealerUpcard, shoe, options);
+      self.postMessage({ type: 'bestMove', result });
+    } else if (type === 'sideBets') {
+      const sideBets = getSideBetsEV(shoe, options);
+      self.postMessage({ type: 'sideBets', sideBets });
+    }
   } catch (error) {
-    // Handling error if any
     console.error("Worker error:", error);
   }
 };

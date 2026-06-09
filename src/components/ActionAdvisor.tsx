@@ -1,13 +1,14 @@
 import React from 'react';
-import { type BestMoveResult, type BetSuggestion } from '../engine/blackjackEngine';
+import { type BestMoveResult, type BetSuggestion, type SideBetsEV } from '../engine/blackjackEngine';
 
 interface ActionAdvisorProps {
   bestMove: BestMoveResult | null;
+  sideBetsEV: SideBetsEV | null;
   betSuggestion: BetSuggestion | null;
   isLoading?: boolean;
 }
 
-export const ActionAdvisor: React.FC<ActionAdvisorProps> = ({ bestMove, betSuggestion, isLoading }) => {
+export const ActionAdvisor: React.FC<ActionAdvisorProps> = ({ bestMove, sideBetsEV, betSuggestion, isLoading }) => {
   if (isLoading) {
     return (
       <div className="p-6 flex flex-col items-center justify-center h-full text-white">
@@ -20,8 +21,61 @@ export const ActionAdvisor: React.FC<ActionAdvisorProps> = ({ bestMove, betSugge
   const content = () => {
     if (!bestMove) {
       return (
-        <div className="p-6 flex flex-col items-center justify-center h-full text-gray-400 text-center">
-          <p>Enter dealer and player cards to see the optimal strategy.</p>
+        <div className="flex-1 flex flex-col">
+          {sideBetsEV && (
+            <div className="mb-4 flex-1">
+              <p className="text-xs sm:text-sm text-gray-400 mb-2 sm:mb-3 uppercase tracking-wider">Side Bets EV</p>
+              <div className="bg-gray-900 rounded-lg overflow-hidden">
+                <table className="w-full text-left text-sm sm:text-base">
+                  <tbody>
+                    <tr className="border-b border-gray-800">
+                      <td className="py-2 px-3 sm:py-3 sm:px-4 font-medium">Perfect Pairs</td>
+                      <td className="py-2 px-3 sm:py-3 sm:px-4 text-right font-mono">
+                        {sideBetsEV.perfectPairs !== null ? (
+                          <span className={sideBetsEV.perfectPairs > 0 ? 'text-green-400' : 'text-red-400'}>
+                            {sideBetsEV.perfectPairs > 0 ? '+' : ''}{sideBetsEV.perfectPairs.toFixed(4)}
+                          </span>
+                        ) : <span className="text-gray-500">N/A</span>}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-gray-800">
+                      <td className="py-2 px-3 sm:py-3 sm:px-4 font-medium">21+3</td>
+                      <td className="py-2 px-3 sm:py-3 sm:px-4 text-right font-mono">
+                        {sideBetsEV.twentyOnePlusThree !== null ? (
+                          <span className={sideBetsEV.twentyOnePlusThree > 0 ? 'text-green-400' : 'text-red-400'}>
+                            {sideBetsEV.twentyOnePlusThree > 0 ? '+' : ''}{sideBetsEV.twentyOnePlusThree.toFixed(4)}
+                          </span>
+                        ) : <span className="text-gray-500">N/A</span>}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-gray-800">
+                      <td className="py-2 px-3 sm:py-3 sm:px-4 font-medium">Hot 3</td>
+                      <td className="py-2 px-3 sm:py-3 sm:px-4 text-right font-mono">
+                        {sideBetsEV.hot3 !== null ? (
+                          <span className={sideBetsEV.hot3 > 0 ? 'text-green-400' : 'text-red-400'}>
+                            {sideBetsEV.hot3 > 0 ? '+' : ''}{sideBetsEV.hot3.toFixed(4)}
+                          </span>
+                        ) : <span className="text-gray-500">N/A</span>}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 px-3 sm:py-3 sm:px-4 font-medium">Bust It</td>
+                      <td className="py-2 px-3 sm:py-3 sm:px-4 text-right font-mono">
+                        {sideBetsEV.bustIt !== null ? (
+                          <span className={sideBetsEV.bustIt > 0 ? 'text-green-400' : 'text-red-400'}>
+                            {sideBetsEV.bustIt > 0 ? '+' : ''}{sideBetsEV.bustIt.toFixed(4)}
+                          </span>
+                        ) : <span className="text-gray-500">N/A</span>}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          <div className="p-6 flex flex-col items-center justify-center text-gray-400 text-center flex-1">
+            <p>Enter dealer and player cards to see the optimal playing strategy.</p>
+          </div>
         </div>
       );
     }
