@@ -341,26 +341,32 @@ export function getBetSuggestion(shoe: Shoe, options: GameOptions): BetSuggestio
 
   // Strict Kelly Criterion Formula: f* = edge / variance
   // For blackjack, the variance of a hand is approximately 1.15 to 1.3 (due to doubles, splits, blackjacks). We'll use 1.25.
-  const variance = 1.25;
+  const variance = 1.15; // Lower variance for more aggressive sizing
 
   if (estimatedEdge > 0) {
-    const kellyFraction = estimatedEdge / variance;
-    // We suggest betting the exact Kelly fraction of the bankroll
+    const kellyFraction = (estimatedEdge / variance) * 2.0; // Double Kelly fraction for more aggressive bet
     suggestedBet = options.balance * kellyFraction;
   }
 
   // Ensure bet doesn't fall below minBet (unless balance is lower)
   suggestedBet = Math.max(options.minBet, suggestedBet);
 
-  // Ensure bet doesn't exceed 25% of balance as a safety cap (Kelly can be aggressive)
-  const maxSafeBet = Math.max(options.minBet, Math.floor(options.balance * 0.25));
+  // Ensure bet doesn't exceed 50% of balance as a safety cap (Kelly can be aggressive)
+  const maxSafeBet = Math.max(options.minBet, Math.floor(options.balance * 0.5));
   suggestedBet = Math.min(suggestedBet, maxSafeBet);
 
   // Cap at remaining balance if less than minBet
   suggestedBet = Math.min(suggestedBet, options.balance);
 
-  // Round to nearest whole number for practical betting
-  suggestedBet = Math.round(suggestedBet);
+  // Round to nearest 10 for practical betting
+  suggestedBet = Math.round(suggestedBet / 10) * 10;
+
+  // Ensure we don't go below minBet due to rounding (rounded up to nearest 10)
+  suggestedBet = Math.max(Math.ceil(options.minBet / 10) * 10, suggestedBet);
+
+  if (suggestedBet > options.balance) {
+    suggestedBet = Math.floor(options.balance / 10) * 10;
+  }
 
   return {
     runningCount,
