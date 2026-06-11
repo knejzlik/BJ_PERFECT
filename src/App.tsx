@@ -1,10 +1,9 @@
-import { useState } from 'react';
-import { type GameState, type GameOptions, initializeShoe, type Card } from './types';
+import { useState, useEffect, useRef } from 'react';
+import { type GameState, type GameOptions, initializeShoe, type Card, DEFAULT_KEYBINDS } from './types';
 import { Sidebar } from './components/Sidebar';
 import { MainTable } from './components/MainTable';
 import { ActionAdvisor } from './components/ActionAdvisor';
 import { type BestMoveResult, type SideBetsEV, type BetSuggestion } from './engine/blackjackEngine';
-import { useEffect, useRef } from 'react';
 
 const DEFAULT_OPTIONS: GameOptions = {
   decks: 6,
@@ -36,6 +35,39 @@ function App() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const workerRef = useRef<Worker | null>(null);
+
+  // Keyboard keybinds and focus state
+  const [activeKeyboardZone, setActiveKeyboardZone] = useState<'dealer' | 'player' | 'discard'>('player');
+  const [discardMode, setDiscardMode] = useState<'add' | 'remove'>('add');
+
+  const LOCAL_STORAGE_KEYBINDS_KEY = 'bj_perfect_keybinds';
+
+  const [keybinds, setKeybinds] = useState<Record<Card, string>>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEYBINDS_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error("Error loading keybinds:", e);
+    }
+    return { ...DEFAULT_KEYBINDS };
+  });
+
+  const handleUpdateKeybind = (card: Card, key: string) => {
+    setKeybinds(prev => {
+      const next = { ...prev, [card]: key.toLowerCase() };
+      localStorage.setItem(LOCAL_STORAGE_KEYBINDS_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleResetKeybinds = () => {
+    setKeybinds(DEFAULT_KEYBINDS);
+    localStorage.setItem(LOCAL_STORAGE_KEYBINDS_KEY, JSON.stringify(DEFAULT_KEYBINDS));
+  };
+
+
 
   useEffect(() => {
     workerRef.current = new Worker(new URL('./worker/blackjack.worker.ts', import.meta.url), {
@@ -225,26 +257,6 @@ function App() {
     });
   };
 
-  const handleClearTable = () => {
-    setGameState(prev => {
-      // Return ALL cards (dealer, player, discard) to the shoe
-      const allPlayerCards = prev.playerHands.flatMap(h => h.cards);
-      const allCards = [...prev.dealerCards, ...allPlayerCards, ...prev.discardCards];
-
-      const newShoe = { ...prev.shoe };
-      allCards.forEach(c => newShoe[c]++);
-
-      return {
-        ...prev,
-        dealerCards: [],
-        playerHands: [{ cards: [], bet: 1, isSplitHand: false }],
-        discardCards: [],
-        activeHandIndex: 0,
-        shoe: newShoe
-      };
-    });
-  };
-
   const handleSplit = (handIndex: number) => {
     setGameState((prev) => {
       const hands = [...prev.playerHands];
@@ -277,6 +289,53 @@ function App() {
     });
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'SELECT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) {
+        return;
+      }
+
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        setActiveKeyboardZone(prev => {
+          if (prev === 'player') return 'dealer';
+          if (prev === 'dealer') return 'discard';
+          return 'player';
+        });
+        return;
+      }
+
+      const pressedKey = e.key.toLowerCase();
+      const card = Object.keys(keybinds).find(
+        (c) => keybinds[c as Card] === pressedKey
+      ) as Card | undefined;
+
+      if (card) {
+        e.preventDefault();
+        if (activeKeyboardZone === 'dealer') {
+          handleAddDealerCard(card);
+        } else if (activeKeyboardZone === 'discard') {
+          if (discardMode === 'add') {
+            handleAddDiscardCard(card);
+          } else {
+            const index = gameState.discardCards.lastIndexOf(card);
+            if (index !== -1) {
+              handleRemoveDiscardCard(index);
+            }
+          }
+        } else if (activeKeyboardZone === 'player') {
+          handleAddPlayerCard(gameState.activeHandIndex, card);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [keybinds, activeKeyboardZone, discardMode, gameState.discardCards, gameState.activeHandIndex]);
 
   return (
     <div className="flex flex-col lg:flex-row h-screen bg-gray-900 font-sans overflow-hidden">
@@ -297,6 +356,9 @@ function App() {
         onResetShoe={resetShoe}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        keybinds={keybinds}
+        onUpdateKeybind={handleUpdateKeybind}
+        onResetKeybinds={handleResetKeybinds}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -318,8 +380,11 @@ function App() {
               onRemoveDiscardCard={handleRemoveDiscardCard}
               onAddPlayerCard={handleAddPlayerCard}
               onRemovePlayerCard={handleRemovePlayerCard}
-              onClearTable={handleClearTable}
               onNextRound={handleNextRound}
+              activeKeyboardZone={activeKeyboardZone}
+              setActiveKeyboardZone={setActiveKeyboardZone}
+              discardMode={discardMode}
+              setDiscardMode={setDiscardMode}
             />
 
             {/* Insurance Detector */}

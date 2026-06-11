@@ -19,8 +19,13 @@ interface MainTableProps {
   onAddPlayerCard: (handIndex: number, card: Card) => void;
   onRemovePlayerCard: (handIndex: number, cardIndex: number) => void;
 
-  onClearTable: () => void;
   onNextRound: () => void;
+
+  // Keyboard focus target props
+  activeKeyboardZone: 'dealer' | 'player' | 'discard';
+  setActiveKeyboardZone: (zone: 'dealer' | 'player' | 'discard') => void;
+  discardMode: 'add' | 'remove';
+  setDiscardMode: (mode: 'add' | 'remove') => void;
 }
 
 const CARDS: Card[] = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
@@ -39,8 +44,11 @@ export const MainTable: React.FC<MainTableProps> = ({
   onRemoveDiscardCard,
   onAddPlayerCard,
   onRemovePlayerCard,
-  onClearTable,
   onNextRound,
+  activeKeyboardZone,
+  setActiveKeyboardZone,
+  discardMode,
+  setDiscardMode,
 }) => {
 
   const renderCard = (card: Card, index: number, onRemove: () => void) => (
@@ -54,18 +62,21 @@ export const MainTable: React.FC<MainTableProps> = ({
     </div>
   );
 
-  const renderKeyboard = (onAdd: (card: Card) => void, active: boolean) => (
+  const renderKeyboard = (
+    onAction: (card: Card) => void,
+    active: boolean,
+    isDisabled?: (card: Card) => boolean
+  ) => (
     <div className={`flex flex-wrap justify-center gap-1 md:gap-2 mt-2 transition-opacity ${active ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}>
       {CARDS.map((card) => {
-        const count = shoe[card];
-        const isEmpty = count === 0;
+        const disabled = isDisabled ? isDisabled(card) : shoe[card] === 0;
         return (
           <button
             key={card}
-            onClick={() => onAdd(card)}
-            disabled={isEmpty}
+            onClick={() => onAction(card)}
+            disabled={disabled}
             className={`w-8 h-10 sm:w-10 sm:h-12 md:w-14 md:h-16 rounded shadow-sm text-sm sm:text-base md:text-xl font-bold flex items-center justify-center transition-transform active:scale-95 ${
-              isEmpty
+              disabled
                 ? 'bg-gray-700/50 text-gray-400 cursor-not-allowed'
                 : 'bg-white/90 text-gray-900 hover:bg-white'
             }`}
@@ -88,54 +99,123 @@ export const MainTable: React.FC<MainTableProps> = ({
         >
           Next Round
         </button>
-        <button
-          onClick={onClearTable}
-          className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded transition-colors text-sm"
-        >
-          Clear Table
-        </button>
       </div>
 
       {/* Dealer Zone */}
       <div className="flex flex-col items-center mb-6 w-full">
-        <h2 className="text-sm md:text-xl font-bold text-white mb-2 tracking-wider uppercase opacity-80">Dealer</h2>
-        <div className="flex flex-col items-center p-2 bg-black/20 rounded-xl min-w-[200px] md:min-w-[300px]">
+        <h2 className="text-sm md:text-xl font-bold text-white mb-2 tracking-wider uppercase opacity-80 flex items-center gap-2">
+          Dealer
+          {activeKeyboardZone === 'dealer' && (
+            <span className="text-[10px] bg-blue-500 text-white font-black px-1.5 py-0.5 rounded-full animate-pulse uppercase">Active KB</span>
+          )}
+        </h2>
+        <div
+          onClick={() => setActiveKeyboardZone('dealer')}
+          className={`flex flex-col items-center p-2 rounded-xl min-w-[200px] md:min-w-[300px] transition-all cursor-pointer ${
+            activeKeyboardZone === 'dealer'
+              ? 'bg-blue-600/20 ring-2 md:ring-4 ring-blue-400'
+              : 'bg-black/20 hover:bg-black/30'
+          }`}
+        >
           <div className="flex flex-wrap gap-1 md:gap-2 justify-center items-center min-h-[4.5rem] md:min-h-[7rem]">
             {dealerCards.length === 0 && <span className="text-white/30 text-sm">No cards</span>}
             {dealerCards.map((card, idx) => renderCard(card, idx, () => onRemoveDealerCard(idx)))}
           </div>
           <div className="mt-2 pt-2 border-t border-white/10 w-full">
-            {renderKeyboard(onAddDealerCard, true)}
+            {renderKeyboard(onAddDealerCard, activeKeyboardZone === 'dealer')}
           </div>
         </div>
       </div>
 
       {/* Discard Tray Zone */}
       <div className="flex flex-col items-center mb-6 w-full">
-        <h2 className="text-sm md:text-xl font-bold text-white mb-2 tracking-wider uppercase opacity-80">Other Players (Discard)</h2>
-        <div className="flex flex-col items-center p-2 bg-black/20 rounded-xl w-full max-w-4xl">
-          <div className="flex items-center justify-between w-full px-4 py-2 bg-black/30 rounded-lg mb-2">
+        <h2 className="text-sm md:text-xl font-bold text-white mb-2 tracking-wider uppercase opacity-80 flex items-center gap-2">
+          Other Players (Discard)
+          {activeKeyboardZone === 'discard' && (
+            <span className="text-[10px] bg-blue-500 text-white font-black px-1.5 py-0.5 rounded-full animate-pulse uppercase">Active KB</span>
+          )}
+        </h2>
+        <div
+          onClick={() => setActiveKeyboardZone('discard')}
+          className={`flex flex-col items-center p-2 rounded-xl w-full max-w-4xl transition-all cursor-pointer ${
+            activeKeyboardZone === 'discard'
+              ? 'bg-blue-600/20 ring-2 md:ring-4 ring-blue-400'
+              : 'bg-black/20 hover:bg-black/30'
+          }`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4 w-full px-4 py-2 bg-black/30 rounded-lg mb-2">
             <span className="text-white font-medium text-sm md:text-lg">
               Discarded Cards: <span className="font-bold text-yellow-400 ml-2">{discardCards.length}</span>
             </span>
-            {discardCards.length > 0 && (
-              <button
-                onClick={() => onRemoveDiscardCard(discardCards.length - 1)}
-                className="text-red-400 hover:text-red-300 text-xs md:text-sm font-bold border border-red-500/30 hover:bg-red-500/10 px-3 py-1 rounded transition-colors"
-              >
-                Undo Last Discard
-              </button>
-            )}
+            <div className="flex items-center gap-4">
+              {/* Add/Remove Toggle */}
+              <div className="flex items-center bg-gray-700/50 rounded-lg p-0.5 border border-gray-600/30">
+                <button
+                  onClick={() => setDiscardMode('add')}
+                  className={`px-3 py-1 text-xs md:text-sm font-bold rounded-md transition-all ${
+                    discardMode === 'add'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => setDiscardMode('remove')}
+                  className={`px-3 py-1 text-xs md:text-sm font-bold rounded-md transition-all ${
+                    discardMode === 'remove'
+                      ? 'bg-red-600 text-white shadow-md'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  Remove
+                </button>
+              </div>
+
+              {/* Undo Button */}
+              {discardCards.length > 0 && (
+                <button
+                  onClick={() => onRemoveDiscardCard(discardCards.length - 1)}
+                  className="text-red-400 hover:text-red-300 text-xs md:text-sm font-bold border border-red-500/30 hover:bg-red-500/10 px-3 py-1 rounded transition-colors"
+                >
+                  Undo Last Discard
+                </button>
+              )}
+            </div>
           </div>
           <div className="pt-2 border-t border-white/10 w-full">
-             {renderKeyboard(onAddDiscardCard, true)}
+             {renderKeyboard(
+               (card) => {
+                 if (discardMode === 'add') {
+                   onAddDiscardCard(card);
+                 } else {
+                   const index = discardCards.lastIndexOf(card);
+                   if (index !== -1) {
+                     onRemoveDiscardCard(index);
+                   }
+                 }
+               },
+               activeKeyboardZone === 'discard',
+               (card) => {
+                 if (discardMode === 'add') {
+                   return shoe[card] === 0;
+                 } else {
+                   return !discardCards.includes(card);
+                 }
+               }
+             )}
           </div>
         </div>
       </div>
 
       {/* Player Zone */}
       <div className="flex flex-col items-center w-full mt-auto mb-4">
-        <h2 className="text-sm md:text-xl font-bold text-white mb-2 tracking-wider uppercase opacity-80">Player</h2>
+        <h2 className="text-sm md:text-xl font-bold text-white mb-2 tracking-wider uppercase opacity-80 flex items-center gap-2">
+          Player
+          {activeKeyboardZone === 'player' && (
+            <span className="text-[10px] bg-blue-500 text-white font-black px-1.5 py-0.5 rounded-full animate-pulse uppercase">Active KB</span>
+          )}
+        </h2>
         <div className="flex gap-2 sm:gap-4 md:gap-8 overflow-x-auto max-w-full pb-2 w-full justify-center items-start">
           {playerHands.map((hand, index) => {
             const isActiveHand = index === activeHandIndex;
@@ -144,8 +224,13 @@ export const MainTable: React.FC<MainTableProps> = ({
             return (
               <div
                 key={index}
-                className={`flex flex-col items-center p-2 md:p-4 rounded-xl transition-all w-full max-w-sm shrink-0 ${
-                  isActiveHand ? 'bg-blue-600/30 ring-2 md:ring-4 ring-blue-400' : 'bg-black/20'
+                onClick={() => setActiveKeyboardZone('player')}
+                className={`flex flex-col items-center p-2 md:p-4 rounded-xl transition-all w-full max-w-sm shrink-0 cursor-pointer ${
+                  isActiveHand
+                    ? activeKeyboardZone === 'player'
+                      ? 'bg-blue-600/30 ring-2 md:ring-4 ring-blue-400'
+                      : 'bg-blue-600/10 ring-2 ring-blue-400/30'
+                    : 'bg-black/20 hover:bg-black/30'
                 }`}
               >
                 <div className="flex flex-wrap gap-1 md:gap-2 mb-2 justify-center items-center min-h-[4.5rem] md:min-h-[7rem]">
@@ -154,7 +239,7 @@ export const MainTable: React.FC<MainTableProps> = ({
                 </div>
 
                 <div className="w-full pt-2 border-t border-white/10 mb-2">
-                   {renderKeyboard((card) => onAddPlayerCard(index, card), isActiveHand)}
+                   {renderKeyboard((card) => onAddPlayerCard(index, card), isActiveHand && activeKeyboardZone === 'player')}
                 </div>
 
                 <div className="flex gap-2 mt-auto pt-2">

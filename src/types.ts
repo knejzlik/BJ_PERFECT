@@ -47,3 +47,19 @@ export function initializeShoe(decks: number): Shoe {
     'A': 4 * decks,
   };
 }
+
+export const DEFAULT_KEYBINDS: Record<Card, string> = {
+  '2': '2',
+  '3': '3',
+  '4': '4',
+  '5': '5',
+  '6': '6',
+  '7': '7',
+  '8': '8',
+  '9': '9',
+  'T': 't',
+  'J': 'j',
+  'Q': 'q',
+  'K': 'k',
+  'A': 'a',
+};

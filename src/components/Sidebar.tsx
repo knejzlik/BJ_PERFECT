@@ -1,5 +1,5 @@
-import React from 'react';
-import { type GameOptions } from '../types';
+import React, { useState, useEffect } from 'react';
+import { type GameOptions, type Card } from '../types';
 
 interface SidebarProps {
   options: GameOptions;
@@ -7,9 +7,41 @@ interface SidebarProps {
   onResetShoe?: () => void;
   isOpen: boolean;
   onClose: () => void;
+
+  keybinds: Record<Card, string>;
+  onUpdateKeybind: (card: Card, key: string) => void;
+  onResetKeybinds: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ options, setOptions, onResetShoe, isOpen, onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  options,
+  setOptions,
+  onResetShoe,
+  isOpen,
+  onClose,
+  keybinds,
+  onUpdateKeybind,
+  onResetKeybinds,
+}) => {
+  const [listeningCard, setListeningCard] = useState<Card | null>(null);
+
+  useEffect(() => {
+    if (!listeningCard) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const key = e.key.toLowerCase();
+      if (key && key.length === 1) {
+        onUpdateKeybind(listeningCard, key);
+      }
+      setListeningCard(null);
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [listeningCard, onUpdateKeybind]);
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
 
@@ -152,6 +184,38 @@ export const Sidebar: React.FC<SidebarProps> = ({ options, setOptions, onResetSh
                 step="1"
               />
             </div>
+          </div>
+
+          {/* Keyboard Keybinds Settings */}
+          <div className="flex flex-col gap-2 border-t border-gray-600 pt-4 mt-2">
+            <label className="text-sm font-medium text-blue-300">Keyboard Keybinds</label>
+            <p className="text-xs text-gray-400">Click a button below and press any single key to assign a shortcut.</p>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              {(Object.keys(keybinds) as Card[]).map((c) => {
+                const isListening = listeningCard === c;
+                return (
+                  <div key={c} className="flex items-center justify-between bg-gray-700/30 p-2 rounded border border-gray-600/20">
+                    <span className="font-bold text-sm text-gray-300">Card {c}:</span>
+                    <button
+                      onClick={() => setListeningCard(c)}
+                      className={`px-3 py-1 rounded text-xs font-mono font-bold transition-all min-w-[3rem] text-center ${
+                        isListening
+                          ? 'bg-yellow-500 text-black animate-pulse ring-2 ring-yellow-400'
+                          : 'bg-gray-700 text-white hover:bg-gray-600'
+                      }`}
+                    >
+                      {isListening ? '...' : keybinds[c].toUpperCase()}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              onClick={onResetKeybinds}
+              className="mt-2 text-xs text-red-400 hover:text-red-300 font-bold border border-red-500/20 hover:bg-red-500/10 py-1.5 rounded transition-all w-full text-center"
+            >
+              Reset Keybinds to Default
+            </button>
           </div>
         </div>
 

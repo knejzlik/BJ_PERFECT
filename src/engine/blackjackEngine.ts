@@ -28,7 +28,9 @@ export type DealerProbabilities = Record<number | 'bust' | 'bust_3' | 'bust_4' |
 export function getDealerProbabilities(
   dealerCards: Card[],
   shoe: Shoe,
-  options: GameOptions
+  options: GameOptions,
+  dealerCache?: Map<string, DealerProbabilities>,
+  excludeBlackjack: boolean = true
 ): DealerProbabilities {
   const probs: DealerProbabilities = {
     17: 0,
@@ -49,6 +51,15 @@ export function getDealerProbabilities(
 
   if (totalCards === 0) {
     return probs;
+  }
+
+  const dealerKey = dealerCards.join(',');
+  const shoeKey = Object.values(shoe).join(',');
+  const ruleKey = options.standOnSoft17 ? 'S17' : 'H17';
+  const cacheKey = `${dealerKey}|${shoeKey}|${ruleKey}|${excludeBlackjack}`;
+
+  if (dealerCache && dealerCache.has(cacheKey)) {
+    return dealerCache.get(cacheKey)!;
   }
 
   function simulate(currentCards: Card[], currentProb: number, currentShoe: Shoe) {
@@ -80,10 +91,33 @@ export function getDealerProbabilities(
     const cardsInShoe = Object.values(currentShoe).reduce((sum, count) => sum + count, 0);
     if (cardsInShoe === 0) return;
 
+    // Condition on no Blackjack if excludeBlackjack is true and this is the hole card draw
+    const isHoleCardDraw = excludeBlackjack && currentCards.length === 1;
+    let allowedCardsInShoe = cardsInShoe;
+
+    if (isHoleCardDraw) {
+      const upcard = currentCards[0];
+      if (upcard === 'A') {
+        const tensCount = (currentShoe['T'] || 0) + (currentShoe['J'] || 0) + (currentShoe['Q'] || 0) + (currentShoe['K'] || 0);
+        allowedCardsInShoe = cardsInShoe - tensCount;
+      } else if (['T', 'J', 'Q', 'K'].includes(upcard)) {
+        const acesCount = currentShoe['A'] || 0;
+        allowedCardsInShoe = cardsInShoe - acesCount;
+      }
+    }
+
+    if (allowedCardsInShoe === 0) return;
+
     for (const card in currentShoe) {
       const c = card as Card;
       if (currentShoe[c] > 0) {
-        const drawProb = currentShoe[c] / cardsInShoe;
+        if (isHoleCardDraw) {
+          const upcard = currentCards[0];
+          if (upcard === 'A' && ['T', 'J', 'Q', 'K'].includes(c)) continue;
+          if (['T', 'J', 'Q', 'K'].includes(upcard) && c === 'A') continue;
+        }
+
+        const drawProb = currentShoe[c] / allowedCardsInShoe;
         const newShoe = { ...currentShoe, [c]: currentShoe[c] - 1 };
         simulate([...currentCards, c], currentProb * drawProb, newShoe);
       }
@@ -92,14 +126,25 @@ export function getDealerProbabilities(
 
   simulate(dealerCards, 1, shoe);
 
+  if (dealerCache) {
+    dealerCache.set(cacheKey, { ...probs });
+  }
+
   return probs;
 }
 
-export function calculateStandEV(playerHand: Card[], dealerProbabilities: DealerProbabilities): number {
+export function calculateStandEV(
+  playerHand: Card[],
+  dealerCards: Card[],
+  shoe: Shoe,
+  options: GameOptions,
+  dealerCache?: Map<string, DealerProbabilities>
+): number {
   const playerValue = getHandValue(playerHand).total;
 
   if (playerValue > 21) return -1;
 
+  const dealerProbabilities = getDealerProbabilities(dealerCards, shoe, options, dealerCache, true);
   let ev = 0;
 
   for (const dealerResultStr in dealerProbabilities) {
@@ -126,17 +171,17 @@ export function calculateStandEV(playerHand: Card[], dealerProbabilities: Dealer
 export function calculateHitEV(
   playerHand: Card[],
   shoe: Shoe,
-  dealerProbabilities: DealerProbabilities,
+  dealerCards: Card[],
   options: GameOptions,
   depth: number = 0,
-  memo?: Map<string, number>
+  memo?: Map<string, number>,
+  dealerCache?: Map<string, DealerProbabilities>
 ): number {
   if (!memo) memo = new Map();
 
   const { total } = getHandValue(playerHand);
-  if (total >= 21) return calculateStandEV(playerHand, dealerProbabilities); // Can't hit if 21 or bust
+  if (total >= 21) return calculateStandEV(playerHand, dealerCards, shoe, options, dealerCache);
 
-  // Basic cache key (player cards sorted + shoe values)
   const sortedCards = [...playerHand].sort().join('');
   const shoeKey = Object.values(shoe).join(',');
   const cacheKey = `H:${sortedCards}|${shoeKey}`;
@@ -145,8 +190,7 @@ export function calculateHitEV(
     return memo.get(cacheKey)!;
   }
 
-  // Prevent stack overflow for extremely unlikely long sequences
-  if (depth > 12) return calculateStandEV(playerHand, dealerProbabilities);
+  if (depth > 12) return calculateStandEV(playerHand, dealerCards, shoe, options, dealerCache);
 
   const totalCards = Object.values(shoe).reduce((sum, count) => sum + count, 0);
   if (totalCards === 0) return 0;
@@ -163,11 +207,10 @@ export function calculateHitEV(
       const newTotal = getHandValue(newHand).total;
 
       if (newTotal > 21) {
-        expectedValue += drawProb * -1; // Bust
+        expectedValue += drawProb * -1;
       } else {
-        // The choice is either to stand with the new hand or hit again
-        const standEv = calculateStandEV(newHand, dealerProbabilities);
-        const hitEv = calculateHitEV(newHand, newShoe, dealerProbabilities, options, depth + 1, memo);
+        const standEv = calculateStandEV(newHand, dealerCards, newShoe, options, dealerCache);
+        const hitEv = calculateHitEV(newHand, newShoe, dealerCards, options, depth + 1, memo, dealerCache);
         expectedValue += drawProb * Math.max(standEv, hitEv);
       }
     }
@@ -180,9 +223,10 @@ export function calculateHitEV(
 export function calculateDoubleEV(
   playerHand: Card[],
   shoe: Shoe,
-  dealerProbabilities: DealerProbabilities,
+  dealerCards: Card[],
+  options: GameOptions,
+  dealerCache?: Map<string, DealerProbabilities>
 ): number {
-  // You only get one card on a double down
   const totalCards = Object.values(shoe).reduce((sum, count) => sum + count, 0);
   if (totalCards === 0) return 0;
 
@@ -192,16 +236,16 @@ export function calculateDoubleEV(
     const c = card as Card;
     if (shoe[c] > 0) {
       const drawProb = shoe[c] / totalCards;
+      const newShoe = { ...shoe, [c]: shoe[c] - 1 };
       const newHand = [...playerHand, c];
 
       const newTotal = getHandValue(newHand).total;
 
       if (newTotal > 21) {
-        expectedValue += drawProb * -2; // Bust, lose double bet
+        expectedValue += drawProb * -2;
       } else {
-        // Must stand after double
-        const standEv = calculateStandEV(newHand, dealerProbabilities);
-        expectedValue += drawProb * (standEv * 2); // Double the normal EV
+        const standEv = calculateStandEV(newHand, dealerCards, newShoe, options, dealerCache);
+        expectedValue += drawProb * (standEv * 2);
       }
     }
   }
@@ -222,9 +266,11 @@ function areCardsEqualValue(c1: Card, c2: Card): boolean {
 export function calculateSplitEV(
   playerHand: Card[],
   shoe: Shoe,
-  dealerProbabilities: DealerProbabilities,
+  dealerCards: Card[],
   options: GameOptions,
-  memo?: Map<string, number>
+  splitDepth: number = 0,
+  memo?: Map<string, number>,
+  dealerCache?: Map<string, DealerProbabilities>
 ): number | null {
   if (playerHand.length !== 2) return null;
   if (!areCardsEqualValue(playerHand[0], playerHand[1])) return null;
@@ -242,25 +288,31 @@ export function calculateSplitEV(
       const newShoe = { ...shoe, [c]: shoe[c] - 1 };
       const newHand = [splitCard, c];
 
-      // If we split Aces, we usually only get one card
       if (splitCard === 'A') {
-        singleHandEv += drawProb * calculateStandEV(newHand, dealerProbabilities);
+        let maxEv = calculateStandEV(newHand, dealerCards, newShoe, options, dealerCache);
+        if (splitDepth < 3 && c === 'A') {
+          const resplitEv = calculateSplitEV(newHand, newShoe, dealerCards, options, splitDepth + 1, memo, dealerCache);
+          if (resplitEv !== null) {
+            maxEv = Math.max(maxEv, resplitEv);
+          }
+        }
+        singleHandEv += drawProb * maxEv;
       } else {
-        const standEv = calculateStandEV(newHand, dealerProbabilities);
-        const hitEv = calculateHitEV(newHand, newShoe, dealerProbabilities, options, 0, memo);
+        const standEv = calculateStandEV(newHand, dealerCards, newShoe, options, dealerCache);
+        const hitEv = calculateHitEV(newHand, newShoe, dealerCards, options, 0, memo, dealerCache);
 
-        // Simplified: assume we take the best of hit/stand/double for each resulting hand
-        // In a perfect engine, we'd recursively calculate EVs, but this is a close approximation
-        // considering DAS (Double After Split)
         let maxEv = Math.max(standEv, hitEv);
 
         if (options.doubleAfterSplit) {
-          calculateDoubleEV([splitCard], newShoe, dealerProbabilities);
-          // Only compare double EV if it's a valid move (which it is on 2 cards)
-          // Wait, calculateDoubleEV needs the *newHand* not just [splitCard]
-          const correctDoubleEv = calculateDoubleEV([splitCard], newShoe, dealerProbabilities); // It simulates drawing one card
-
+          const correctDoubleEv = calculateDoubleEV(newHand, newShoe, dealerCards, options, dealerCache);
           maxEv = Math.max(maxEv, correctDoubleEv);
+        }
+
+        if (splitDepth < 3 && areCardsEqualValue(splitCard, c)) {
+          const resplitEv = calculateSplitEV(newHand, newShoe, dealerCards, options, splitDepth + 1, memo, dealerCache);
+          if (resplitEv !== null) {
+            maxEv = Math.max(maxEv, resplitEv);
+          }
         }
 
         singleHandEv += drawProb * maxEv;
@@ -268,7 +320,6 @@ export function calculateSplitEV(
     }
   }
 
-  // Splitting gives you two hands with this expected EV
   return singleHandEv * 2;
 }
 
@@ -450,9 +501,7 @@ export function getSideBetsEV(shoe: Shoe, options: GameOptions): SideBetsEV {
           const p3 = count3 / (totalCards - 2);
           const prob = p1 * p2 * p3;
 
-          // We keep pSuited calculated but suppress the unused variable warning if unused
-          // eslint-disable-next-line no-useless-assignment
-          let pSuited = 0;
+          let pSuited: number;
           if (c1 !== c2 && c2 !== c3 && c1 !== c3) pSuited = 1 / 16;
           else if (c1 === c2 && c2 === c3) pSuited = ((D - 1) / (4 * D - 1)) * ((D - 2) / (4 * D - 2));
           else pSuited = ((D - 1) / (4 * D - 1)) * (1 / 4);
@@ -468,9 +517,28 @@ export function getSideBetsEV(shoe: Shoe, options: GameOptions): SideBetsEV {
             ev213 += prob * (pSuited * 5 + (1 - pSuited) * -1);
           }
 
-          // Hot 3 logic
-          const val = (c: Card) => c === 'A' ? 11 : (['T', 'J', 'Q', 'K'].includes(c) ? 10 : parseInt(c, 10));
-          const total = val(c1) + val(c2) + val(c3);
+          // Hot 3 logic (Aces are valued at 1 or 11 to maximize payout)
+          const getHot3Total = (cardsList: Card[]) => {
+            let totalVal = 0;
+            let acesCount = 0;
+            for (const c of cardsList) {
+              if (c === 'A') {
+                acesCount++;
+                totalVal += 11;
+              } else if (['T', 'J', 'Q', 'K'].includes(c)) {
+                totalVal += 10;
+              } else {
+                totalVal += parseInt(c, 10);
+              }
+            }
+            while (totalVal > 21 && acesCount > 0) {
+              totalVal -= 10;
+              acesCount--;
+            }
+            return totalVal;
+          };
+
+          const total = getHot3Total([c1, c2, c3]);
           if (c1 === '7' && c2 === '7' && c3 === '7') {
              evHot3 += prob * 100;
           } else if (total === 21) {
@@ -492,14 +560,12 @@ export function getSideBetsEV(shoe: Shoe, options: GameOptions): SideBetsEV {
   // Bust It
   if (totalCards > 0) {
     let evBustIt = 0;
-    // We approximate Bust It by simulating from each possible upcard
-    // We limit depth heavily or simplify if needed, but since it's in a worker, we can just run it.
     for (const upcard of cards) {
       if (shoe[upcard] === 0) continue;
       const probUpcard = shoe[upcard] / totalCards;
       const shoeMinusUpcard = { ...shoe, [upcard]: shoe[upcard] - 1 };
 
-      const probs = getDealerProbabilities([upcard], shoeMinusUpcard, options);
+      const probs = getDealerProbabilities([upcard], shoeMinusUpcard, options, undefined, false);
       const b3 = probs.bust_3 || 0;
       const b4 = probs.bust_4 || 0;
       const b5 = probs.bust_5 || 0;
@@ -526,31 +592,26 @@ export function getBestMove(
   options: GameOptions
 ): BestMoveResult {
   const memo = new Map<string, number>();
+  const dealerCache = new Map<string, DealerProbabilities>();
 
-  // Calculate dealer probabilities once for the given upcard
   const dealerCards = [dealerUpcard];
-  const shoeWithoutUpcard = { ...shoe };
-  if (shoeWithoutUpcard[dealerUpcard] > 0) {
-    shoeWithoutUpcard[dealerUpcard]--;
-  }
-  const dealerProbabilities = getDealerProbabilities(dealerCards, shoeWithoutUpcard, options);
 
   // Stand EV
-  const standEV = calculateStandEV(playerHand, dealerProbabilities);
+  const standEV = calculateStandEV(playerHand, dealerCards, shoe, options, dealerCache);
 
   // Hit EV
-  const hitEV = calculateHitEV(playerHand, shoeWithoutUpcard, dealerProbabilities, options, 0, memo);
+  const hitEV = calculateHitEV(playerHand, shoe, dealerCards, options, 0, memo, dealerCache);
 
   // Double EV (only on 2 cards usually)
   let doubleEV: number | null = null;
   if (playerHand.length === 2) {
-    doubleEV = calculateDoubleEV(playerHand, shoeWithoutUpcard, dealerProbabilities);
+    doubleEV = calculateDoubleEV(playerHand, shoe, dealerCards, options, dealerCache);
   }
 
   // Split EV
   let splitEV: number | null = null;
   if (playerHand.length === 2 && areCardsEqualValue(playerHand[0], playerHand[1])) {
-     splitEV = calculateSplitEV(playerHand, shoeWithoutUpcard, dealerProbabilities, options, memo);
+     splitEV = calculateSplitEV(playerHand, shoe, dealerCards, options, 0, memo, dealerCache);
   }
 
   // Surrender EV
