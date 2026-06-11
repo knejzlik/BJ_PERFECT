@@ -14,6 +14,9 @@ const DEFAULT_OPTIONS: GameOptions = {
   minBet: 10,
   balance: 1000,
   countingSystem: 'Hi-Lo',
+  bettingSystem: 'Kelly Criterion',
+  bettingAggressiveness: 1.0,
+  allowBetSkipping: false,
 };
 
 const INITIAL_STATE: GameState = {

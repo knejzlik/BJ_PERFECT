@@ -50,9 +50,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       parsedValue = (e.target as HTMLInputElement).checked;
     } else if (name === 'decks' || name === 'minBet' || name === 'balance') {
       parsedValue = parseInt(value, 10) || 0;
-    } else if (name === 'blackjackPayout') {
+    } else if (name === 'blackjackPayout' || name === 'bettingAggressiveness') {
       parsedValue = parseFloat(value);
-    } else if (name === 'countingSystem') {
+    } else {
       parsedValue = value;
     }
 
@@ -148,6 +148,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <div className="flex flex-col gap-2 border-t border-gray-600 pt-4 mt-2">
             <label className="text-sm font-medium text-blue-300">Bankroll & Betting</label>
+            
             <div className="flex flex-col gap-1 mb-2">
               <label className="text-xs text-gray-400">Counting System</label>
               <select
@@ -157,10 +158,58 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="bg-gray-700 text-white p-2 rounded w-full"
               >
                 <option value="Hi-Lo">Hi-Lo (Standard)</option>
-                <option value="Wong Halves">Wong Halves (High Precision)</option>
+                <option value="Wong Halves">Wong Halves (Halves)</option>
+                <option value="Zen Count">Zen Count (Level 2)</option>
+                <option value="Omega II">Omega II (Level 2)</option>
               </select>
             </div>
-            <div className="flex flex-col gap-1">
+
+            <div className="flex flex-col gap-1 mb-2">
+              <label className="text-xs text-gray-400">Betting System</label>
+              <select
+                name="bettingSystem"
+                value={options.bettingSystem}
+                onChange={handleChange}
+                className="bg-gray-700 text-white p-2 rounded w-full"
+              >
+                <option value="Kelly Criterion">Kelly Criterion</option>
+                <option value="Pro Bet Spread (Ramp)">Pro Bet Spread (Ramp)</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1 mb-2">
+              <div className="flex justify-between items-center text-xs text-gray-400">
+                <span>Aggressiveness</span>
+                <span className="font-mono text-blue-300 font-bold">{options.bettingAggressiveness.toFixed(2)}</span>
+              </div>
+              <input
+                type="range"
+                name="bettingAggressiveness"
+                min="0.25"
+                max="2.00"
+                step="0.05"
+                value={options.bettingAggressiveness}
+                onChange={handleChange}
+                className="w-full accent-blue-500 cursor-pointer h-1.5 bg-gray-700 rounded-lg appearance-none"
+              />
+              <span className="text-[10px] text-gray-400 font-medium italic mt-0.5 leading-tight">
+                {options.bettingSystem === 'Kelly Criterion' ? (
+                  options.bettingAggressiveness === 0.25
+                    ? 'Quarter Kelly (Very Safe)'
+                    : options.bettingAggressiveness === 0.50
+                    ? 'Half Kelly (Conservative)'
+                    : options.bettingAggressiveness === 1.00
+                    ? 'Full Kelly (Standard/Optimal)'
+                    : options.bettingAggressiveness === 2.00
+                    ? 'Double Kelly (Very Aggressive)'
+                    : `${options.bettingAggressiveness.toFixed(2)}x Kelly sizing`
+                ) : (
+                  `Bet Ramp Spread: 1-${Math.round(1 + 3 * options.bettingAggressiveness * 2)}`
+                )}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1 mb-2">
               <label className="text-xs text-gray-400">Balance</label>
               <input
                 type="number"
@@ -182,6 +231,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="bg-gray-700 text-white p-2 rounded w-full"
                 min="1"
                 step="1"
+              />
+            </div>
+            
+            <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-600/30">
+              <label className="text-xs text-gray-400 font-medium">Allow Bet Skipping (Low Count)</label>
+              <input
+                type="checkbox"
+                name="allowBetSkipping"
+                checked={options.allowBetSkipping}
+                onChange={handleChange}
+                className="w-4 h-4 accent-blue-500 cursor-pointer"
               />
             </div>
           </div>

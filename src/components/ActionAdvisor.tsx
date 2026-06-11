@@ -150,8 +150,8 @@ export const ActionAdvisor: React.FC<ActionAdvisorProps> = ({ bestMove, sideBets
           </div>
           <div className="border-t border-gray-700 pt-3">
             <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Suggested Bet</p>
-            <div className="text-2xl font-black text-green-400">
-              ${betSuggestion.suggestedBet}
+            <div className={`text-2xl font-black ${betSuggestion.suggestedBet === 0 ? 'text-rose-400' : 'text-green-400'}`}>
+              {betSuggestion.suggestedBet === 0 ? 'Skip Bet' : `$${betSuggestion.suggestedBet}`}
             </div>
           </div>
         </div>

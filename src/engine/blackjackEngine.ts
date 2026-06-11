@@ -135,16 +135,12 @@ export function getDealerProbabilities(
 
 export function calculateStandEV(
   playerHand: Card[],
-  dealerCards: Card[],
-  shoe: Shoe,
-  options: GameOptions,
-  dealerCache?: Map<string, DealerProbabilities>
+  dealerProbabilities: DealerProbabilities
 ): number {
   const playerValue = getHandValue(playerHand).total;
 
   if (playerValue > 21) return -1;
 
-  const dealerProbabilities = getDealerProbabilities(dealerCards, shoe, options, dealerCache, true);
   let ev = 0;
 
   for (const dealerResultStr in dealerProbabilities) {
@@ -171,16 +167,15 @@ export function calculateStandEV(
 export function calculateHitEV(
   playerHand: Card[],
   shoe: Shoe,
-  dealerCards: Card[],
   options: GameOptions,
+  dealerProbabilities: DealerProbabilities,
   depth: number = 0,
-  memo?: Map<string, number>,
-  dealerCache?: Map<string, DealerProbabilities>
+  memo?: Map<string, number>
 ): number {
   if (!memo) memo = new Map();
 
   const { total } = getHandValue(playerHand);
-  if (total >= 21) return calculateStandEV(playerHand, dealerCards, shoe, options, dealerCache);
+  if (total >= 21) return calculateStandEV(playerHand, dealerProbabilities);
 
   const sortedCards = [...playerHand].sort().join('');
   const shoeKey = Object.values(shoe).join(',');
@@ -190,7 +185,7 @@ export function calculateHitEV(
     return memo.get(cacheKey)!;
   }
 
-  if (depth > 12) return calculateStandEV(playerHand, dealerCards, shoe, options, dealerCache);
+  if (depth > 12) return calculateStandEV(playerHand, dealerProbabilities);
 
   const totalCards = Object.values(shoe).reduce((sum, count) => sum + count, 0);
   if (totalCards === 0) return 0;
@@ -209,8 +204,8 @@ export function calculateHitEV(
       if (newTotal > 21) {
         expectedValue += drawProb * -1;
       } else {
-        const standEv = calculateStandEV(newHand, dealerCards, newShoe, options, dealerCache);
-        const hitEv = calculateHitEV(newHand, newShoe, dealerCards, options, depth + 1, memo, dealerCache);
+        const standEv = calculateStandEV(newHand, dealerProbabilities);
+        const hitEv = calculateHitEV(newHand, newShoe, options, dealerProbabilities, depth + 1, memo);
         expectedValue += drawProb * Math.max(standEv, hitEv);
       }
     }
@@ -223,9 +218,7 @@ export function calculateHitEV(
 export function calculateDoubleEV(
   playerHand: Card[],
   shoe: Shoe,
-  dealerCards: Card[],
-  options: GameOptions,
-  dealerCache?: Map<string, DealerProbabilities>
+  dealerProbabilities: DealerProbabilities
 ): number {
   const totalCards = Object.values(shoe).reduce((sum, count) => sum + count, 0);
   if (totalCards === 0) return 0;
@@ -236,7 +229,6 @@ export function calculateDoubleEV(
     const c = card as Card;
     if (shoe[c] > 0) {
       const drawProb = shoe[c] / totalCards;
-      const newShoe = { ...shoe, [c]: shoe[c] - 1 };
       const newHand = [...playerHand, c];
 
       const newTotal = getHandValue(newHand).total;
@@ -244,7 +236,7 @@ export function calculateDoubleEV(
       if (newTotal > 21) {
         expectedValue += drawProb * -2;
       } else {
-        const standEv = calculateStandEV(newHand, dealerCards, newShoe, options, dealerCache);
+        const standEv = calculateStandEV(newHand, dealerProbabilities);
         expectedValue += drawProb * (standEv * 2);
       }
     }
@@ -266,11 +258,10 @@ function areCardsEqualValue(c1: Card, c2: Card): boolean {
 export function calculateSplitEV(
   playerHand: Card[],
   shoe: Shoe,
-  dealerCards: Card[],
   options: GameOptions,
+  dealerProbabilities: DealerProbabilities,
   splitDepth: number = 0,
-  memo?: Map<string, number>,
-  dealerCache?: Map<string, DealerProbabilities>
+  memo?: Map<string, number>
 ): number | null {
   if (playerHand.length !== 2) return null;
   if (!areCardsEqualValue(playerHand[0], playerHand[1])) return null;
@@ -289,27 +280,27 @@ export function calculateSplitEV(
       const newHand = [splitCard, c];
 
       if (splitCard === 'A') {
-        let maxEv = calculateStandEV(newHand, dealerCards, newShoe, options, dealerCache);
+        let maxEv = calculateStandEV(newHand, dealerProbabilities);
         if (splitDepth < 3 && c === 'A') {
-          const resplitEv = calculateSplitEV(newHand, newShoe, dealerCards, options, splitDepth + 1, memo, dealerCache);
+          const resplitEv = calculateSplitEV(newHand, newShoe, options, dealerProbabilities, splitDepth + 1, memo);
           if (resplitEv !== null) {
             maxEv = Math.max(maxEv, resplitEv);
           }
         }
         singleHandEv += drawProb * maxEv;
       } else {
-        const standEv = calculateStandEV(newHand, dealerCards, newShoe, options, dealerCache);
-        const hitEv = calculateHitEV(newHand, newShoe, dealerCards, options, 0, memo, dealerCache);
+        const standEv = calculateStandEV(newHand, dealerProbabilities);
+        const hitEv = calculateHitEV(newHand, newShoe, options, dealerProbabilities, 0, memo);
 
         let maxEv = Math.max(standEv, hitEv);
 
         if (options.doubleAfterSplit) {
-          const correctDoubleEv = calculateDoubleEV(newHand, newShoe, dealerCards, options, dealerCache);
+          const correctDoubleEv = calculateDoubleEV(newHand, newShoe, dealerProbabilities);
           maxEv = Math.max(maxEv, correctDoubleEv);
         }
 
         if (splitDepth < 3 && areCardsEqualValue(splitCard, c)) {
-          const resplitEv = calculateSplitEV(newHand, newShoe, dealerCards, options, splitDepth + 1, memo, dealerCache);
+          const resplitEv = calculateSplitEV(newHand, newShoe, options, dealerProbabilities, splitDepth + 1, memo);
           if (resplitEv !== null) {
             maxEv = Math.max(maxEv, resplitEv);
           }
@@ -354,18 +345,21 @@ export function getBetSuggestion(shoe: Shoe, options: GameOptions): BetSuggestio
     const cardsPlayed = initialShoe[c] - shoe[c];
 
     if (options.countingSystem === 'Wong Halves') {
-      // Wong Halves
-      // 2, 7: +0.5
-      // 3, 4, 6: +1
-      // 5: +1.5
-      // 8: 0
-      // 9: -0.5
-      // T, A: -1
       if (['2', '7'].includes(c)) runningCount += cardsPlayed * 0.5;
       else if (['3', '4', '6'].includes(c)) runningCount += cardsPlayed * 1;
       else if (c === '5') runningCount += cardsPlayed * 1.5;
       else if (c === '9') runningCount += cardsPlayed * -0.5;
       else if (['T', 'J', 'Q', 'K', 'A'].includes(c)) runningCount += cardsPlayed * -1;
+    } else if (options.countingSystem === 'Zen Count') {
+      if (['2', '3', '7'].includes(c)) runningCount += cardsPlayed * 1;
+      else if (['4', '5', '6'].includes(c)) runningCount += cardsPlayed * 2;
+      else if (c === 'A') runningCount += cardsPlayed * -1;
+      else if (['T', 'J', 'Q', 'K'].includes(c)) runningCount += cardsPlayed * -2;
+    } else if (options.countingSystem === 'Omega II') {
+      if (['2', '3', '7'].includes(c)) runningCount += cardsPlayed * 1;
+      else if (['4', '5', '6'].includes(c)) runningCount += cardsPlayed * 2;
+      else if (c === '9') runningCount += cardsPlayed * -1;
+      else if (['T', 'J', 'Q', 'K'].includes(c)) runningCount += cardsPlayed * -2;
     } else {
       // Hi-Lo
       if (['2', '3', '4', '5', '6'].includes(c)) runningCount += cardsPlayed;
@@ -376,47 +370,58 @@ export function getBetSuggestion(shoe: Shoe, options: GameOptions): BetSuggestio
   const totalCardsRemaining = Object.values(shoe).reduce((sum, count) => sum + count, 0);
   const decksRemaining = Math.max(0.5, totalCardsRemaining / 52); // Ensure we don't divide by near zero
 
-  // For Wong Halves, true count is typically rounded to the nearest half or whole, let's keep one decimal precision for display, but use exact for math
   const exactTrueCount = runningCount / decksRemaining;
   const displayTrueCount = Math.round(exactTrueCount * 2) / 2; // Round to nearest 0.5
 
-  // Exact Edge Calculation Approximation
-  // A typical blackjack game has a base house edge of roughly -0.5% (depends on rules, but this is a standard baseline)
-  // For Hi-Lo, each true count unit shifts the edge by roughly +0.5%
-  // For Wong Halves, the shift is similar but slightly more precise in correlation to the true count value.
-  const baseEdge = -0.005; // -0.5%
-  const edgePerTC = 0.005; // +0.5%
-  const estimatedEdge = baseEdge + (exactTrueCount * edgePerTC);
+  let suggestedBet = 0;
+  let isLowCount = false;
+  const aggressiveness = options.bettingAggressiveness; // e.g. 0.25 to 2.0 (default 1.0)
 
-  let suggestedBet = options.minBet;
+  if (options.bettingSystem === 'Kelly Criterion') {
+    const baseEdge = -0.005; // -0.5% base house edge
+    const edgePerTC = 0.005; // +0.5% per True Count unit
+    const estimatedEdge = baseEdge + (exactTrueCount * edgePerTC);
+    const variance = 1.25;
 
-  // Strict Kelly Criterion Formula: f* = edge / variance
-  // For blackjack, the variance of a hand is approximately 1.15 to 1.3 (due to doubles, splits, blackjacks). We'll use 1.25.
-  const variance = 1.15; // Lower variance for more aggressive sizing
-
-  if (estimatedEdge > 0) {
-    const kellyFraction = (estimatedEdge / variance) * 2.0; // Double Kelly fraction for more aggressive bet
-    suggestedBet = options.balance * kellyFraction;
+    if (estimatedEdge > 0) {
+      const kellyFraction = (estimatedEdge / variance) * aggressiveness;
+      suggestedBet = options.balance * kellyFraction;
+    } else {
+      isLowCount = true;
+    }
+  } else {
+    // Pro Bet Spread (Ramp)
+    if (exactTrueCount > 1) {
+      const factor = exactTrueCount - 1;
+      const multiplier = 1 + factor * aggressiveness * 2;
+      suggestedBet = options.minBet * multiplier;
+    } else {
+      isLowCount = true;
+    }
   }
 
-  // Ensure bet doesn't fall below minBet (unless balance is lower)
-  suggestedBet = Math.max(options.minBet, suggestedBet);
+  if (options.allowBetSkipping && isLowCount) {
+    suggestedBet = 0;
+  } else {
+    // Ensure bet doesn't fall below minBet when not skipping
+    suggestedBet = Math.max(options.minBet, suggestedBet);
+  }
 
-  // Ensure bet doesn't exceed 50% of balance as a safety cap (Kelly can be aggressive)
-  const maxSafeBet = Math.max(options.minBet, Math.floor(options.balance * 0.5));
-  suggestedBet = Math.min(suggestedBet, maxSafeBet);
+  if (suggestedBet > 0) {
+    // Ensure bet doesn't exceed 50% of balance as a safety cap
+    const maxSafeBet = Math.max(options.minBet, Math.floor(options.balance * 0.5));
+    suggestedBet = Math.min(suggestedBet, maxSafeBet);
 
-  // Cap at remaining balance if less than minBet
-  suggestedBet = Math.min(suggestedBet, options.balance);
+    // Cap at remaining balance
+    suggestedBet = Math.min(suggestedBet, options.balance);
 
-  // Round to nearest 10 for practical betting
-  suggestedBet = Math.round(suggestedBet / 10) * 10;
+    // Round to nearest 5 or 25 depending on minBet sizing for realistic betting
+    const roundUnit = options.minBet >= 25 ? 25 : 5;
+    suggestedBet = Math.round(suggestedBet / roundUnit) * roundUnit;
 
-  // Ensure we don't go below minBet due to rounding (rounded up to nearest 10)
-  suggestedBet = Math.max(Math.ceil(options.minBet / 10) * 10, suggestedBet);
-
-  if (suggestedBet > options.balance) {
-    suggestedBet = Math.floor(options.balance / 10) * 10;
+    // Make sure it is at least minBet after rounding and doesn't exceed balance
+    suggestedBet = Math.max(options.minBet, suggestedBet);
+    suggestedBet = Math.min(suggestedBet, options.balance);
   }
 
   return {
@@ -592,26 +597,24 @@ export function getBestMove(
   options: GameOptions
 ): BestMoveResult {
   const memo = new Map<string, number>();
-  const dealerCache = new Map<string, DealerProbabilities>();
-
-  const dealerCards = [dealerUpcard];
+  const dealerProbabilities = getDealerProbabilities([dealerUpcard], shoe, options, undefined, true);
 
   // Stand EV
-  const standEV = calculateStandEV(playerHand, dealerCards, shoe, options, dealerCache);
+  const standEV = calculateStandEV(playerHand, dealerProbabilities);
 
   // Hit EV
-  const hitEV = calculateHitEV(playerHand, shoe, dealerCards, options, 0, memo, dealerCache);
+  const hitEV = calculateHitEV(playerHand, shoe, options, dealerProbabilities, 0, memo);
 
   // Double EV (only on 2 cards usually)
   let doubleEV: number | null = null;
   if (playerHand.length === 2) {
-    doubleEV = calculateDoubleEV(playerHand, shoe, dealerCards, options, dealerCache);
+    doubleEV = calculateDoubleEV(playerHand, shoe, dealerProbabilities);
   }
 
   // Split EV
   let splitEV: number | null = null;
   if (playerHand.length === 2 && areCardsEqualValue(playerHand[0], playerHand[1])) {
-     splitEV = calculateSplitEV(playerHand, shoe, dealerCards, options, 0, memo, dealerCache);
+     splitEV = calculateSplitEV(playerHand, shoe, options, dealerProbabilities, 0, memo);
   }
 
   // Surrender EV

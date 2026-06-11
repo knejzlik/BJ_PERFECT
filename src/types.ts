@@ -2,7 +2,9 @@ export type Card = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'T' | 'J' | '
 
 export type Shoe = Record<Card, number>;
 
-export type CountingSystem = 'Hi-Lo' | 'Wong Halves';
+export type CountingSystem = 'Hi-Lo' | 'Wong Halves' | 'Zen Count' | 'Omega II';
+
+export type BettingSystem = 'Kelly Criterion' | 'Pro Bet Spread (Ramp)';
 
 export interface GameOptions {
   decks: number;
@@ -13,6 +15,9 @@ export interface GameOptions {
   minBet: number;
   balance: number;
   countingSystem: CountingSystem;
+  bettingSystem: BettingSystem;
+  bettingAggressiveness: number;
+  allowBetSkipping: boolean;
 }
 
 export interface Hand {
