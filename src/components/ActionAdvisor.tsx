@@ -1,14 +1,24 @@
 import React from 'react';
 import { type BestMoveResult, type BetSuggestion, type SideBetsEV } from '../engine/blackjackEngine';
+import { type HistoryItem } from '../types';
 
 interface ActionAdvisorProps {
   bestMove: BestMoveResult | null;
   sideBetsEV: SideBetsEV | null;
   betSuggestion: BetSuggestion | null;
   isLoading?: boolean;
+  cardHistory: HistoryItem[];
+  onRemoveFromHistory: (item: HistoryItem) => void;
 }
 
-export const ActionAdvisor: React.FC<ActionAdvisorProps> = ({ bestMove, sideBetsEV, betSuggestion, isLoading }) => {
+export const ActionAdvisor: React.FC<ActionAdvisorProps> = ({
+  bestMove,
+  sideBetsEV,
+  betSuggestion,
+  isLoading,
+  cardHistory,
+  onRemoveFromHistory
+}) => {
   if (isLoading) {
     return (
       <div className="p-6 flex flex-col items-center justify-center h-full text-white">
@@ -160,6 +170,42 @@ export const ActionAdvisor: React.FC<ActionAdvisorProps> = ({ bestMove, sideBets
       <div className="flex-1 flex flex-col xl:block">
         {content()}
       </div>
+
+      {/* History Section at the bottom */}
+      {cardHistory.length > 0 && (
+        <div className="mt-6 border-t border-gray-700 pt-4 flex flex-col gap-2 min-h-0 shrink-0">
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Recent Placements</span>
+            <span className="text-[10px] text-gray-500 italic">Last 10 cards</span>
+          </div>
+          <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+            {cardHistory.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between bg-gray-900/60 border border-gray-800 rounded-lg p-2 text-white shadow-sm hover:border-red-500/30 transition-all animate-card-entry"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-sm text-yellow-400 font-mono leading-none">{item.card}</span>
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wider">
+                    &rarr; {item.zone === 'dealer'
+                      ? 'Dealer'
+                      : item.zone === 'discard'
+                      ? 'Discard'
+                      : `Player #${(item.handIndex ?? 0) + 1}`}
+                  </span>
+                </div>
+                <button
+                  onClick={() => onRemoveFromHistory(item)}
+                  className="w-5 h-5 bg-red-950/40 hover:bg-red-600 text-red-400 hover:text-white rounded flex items-center justify-center text-[10px] font-bold transition-all border border-red-500/10 cursor-pointer"
+                  title="Remove card"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

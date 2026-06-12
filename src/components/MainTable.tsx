@@ -26,6 +26,10 @@ interface MainTableProps {
   setActiveKeyboardZone: (zone: 'dealer' | 'player' | 'discard') => void;
   discardMode: 'add' | 'remove';
   setDiscardMode: (mode: 'add' | 'remove') => void;
+
+  // Share props
+  onExport: () => void;
+  onImportClick: () => void;
 }
 
 const CARDS: Card[] = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
@@ -49,13 +53,16 @@ export const MainTable: React.FC<MainTableProps> = ({
   setActiveKeyboardZone,
   discardMode,
   setDiscardMode,
+  onExport,
+  onImportClick,
 }) => {
+  const [glowingButton, setGlowingButton] = React.useState<{ zone: string, card: Card } | null>(null);
 
   const renderCard = (card: Card, index: number, onRemove: () => void) => (
     <div
       key={index}
       onClick={onRemove}
-      className="w-10 h-14 sm:w-12 sm:h-16 md:w-16 md:h-24 bg-white rounded shadow-md flex items-center justify-center text-lg sm:text-xl md:text-2xl font-bold text-gray-800 border-2 border-gray-300 shrink-0 cursor-pointer hover:bg-red-100 hover:border-red-400 group relative transition-colors"
+      className="w-10 h-14 sm:w-12 sm:h-16 md:w-16 md:h-24 bg-white rounded shadow-md flex items-center justify-center text-lg sm:text-xl md:text-2xl font-bold text-gray-800 border-2 border-gray-300 shrink-0 cursor-pointer hover:bg-red-100 hover:border-red-400 group relative transition-all animate-card-entry"
     >
       <span className="group-hover:hidden">{card}</span>
       <span className="hidden group-hover:block text-red-600">X</span>
@@ -65,19 +72,29 @@ export const MainTable: React.FC<MainTableProps> = ({
   const renderKeyboard = (
     onAction: (card: Card) => void,
     active: boolean,
+    zone: string,
     isDisabled?: (card: Card) => boolean
   ) => (
     <div className={`flex flex-wrap justify-center gap-1 md:gap-2 mt-2 transition-opacity ${active ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}>
       {CARDS.map((card) => {
         const disabled = isDisabled ? isDisabled(card) : shoe[card] === 0;
+        const isGlowing = glowingButton?.zone === zone && glowingButton?.card === card;
         return (
           <button
             key={card}
-            onClick={() => onAction(card)}
+            onClick={() => {
+              setGlowingButton({ zone, card });
+              onAction(card);
+              setTimeout(() => {
+                setGlowingButton(null);
+              }, 400);
+            }}
             disabled={disabled}
-            className={`w-8 h-10 sm:w-10 sm:h-12 md:w-14 md:h-16 rounded shadow-sm text-sm sm:text-base md:text-xl font-bold flex items-center justify-center transition-transform active:scale-95 ${
+            className={`w-8 h-10 sm:w-10 sm:h-12 md:w-14 md:h-16 rounded shadow-sm text-sm sm:text-base md:text-xl font-bold flex items-center justify-center transition-all active:scale-95 ${
               disabled
                 ? 'bg-gray-700/50 text-gray-400 cursor-not-allowed'
+                : isGlowing
+                ? 'bg-blue-500 text-white animate-click-glow border-2 border-blue-400'
                 : 'bg-white/90 text-gray-900 hover:bg-white'
             }`}
           >
@@ -89,13 +106,29 @@ export const MainTable: React.FC<MainTableProps> = ({
   );
 
   return (
-    <div className="flex-1 flex flex-col items-center bg-green-800 p-2 sm:p-4 overflow-y-auto">
+    <div className="flex-1 flex flex-col items-center bg-green-800 p-2 sm:p-4 overflow-y-auto w-full">
 
       {/* Top Actions */}
-      <div className="flex gap-4 w-full justify-end mb-4">
+      <div className="flex justify-between items-center w-full max-w-4xl mb-4 border-b border-white/10 pb-4">
+        <div className="flex gap-2">
+          <button
+            onClick={onExport}
+            className="bg-white/10 hover:bg-white/20 text-white font-bold py-1.5 px-3 rounded-lg transition-all text-xs md:text-sm flex items-center gap-1.5 shadow-sm border border-white/10 active:scale-95 cursor-pointer"
+          >
+            <svg className="w-4 h-4 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+            Export
+          </button>
+          <button
+            onClick={onImportClick}
+            className="bg-white/10 hover:bg-white/20 text-white font-bold py-1.5 px-3 rounded-lg transition-all text-xs md:text-sm flex items-center gap-1.5 shadow-sm border border-white/10 active:scale-95 cursor-pointer"
+          >
+            <svg className="w-4 h-4 text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+            Import
+          </button>
+        </div>
         <button
           onClick={onNextRound}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition-colors text-sm"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-4 rounded-lg transition-all text-xs md:text-sm shadow-md active:scale-95 cursor-pointer"
         >
           Next Round
         </button>
@@ -122,7 +155,7 @@ export const MainTable: React.FC<MainTableProps> = ({
             {dealerCards.map((card, idx) => renderCard(card, idx, () => onRemoveDealerCard(idx)))}
           </div>
           <div className="mt-2 pt-2 border-t border-white/10 w-full">
-            {renderKeyboard(onAddDealerCard, activeKeyboardZone === 'dealer')}
+            {renderKeyboard(onAddDealerCard, activeKeyboardZone === 'dealer', 'dealer')}
           </div>
         </div>
       </div>
@@ -196,6 +229,7 @@ export const MainTable: React.FC<MainTableProps> = ({
                  }
                },
                activeKeyboardZone === 'discard',
+               'discard',
                (card) => {
                  if (discardMode === 'add') {
                    return shoe[card] === 0;
@@ -239,7 +273,7 @@ export const MainTable: React.FC<MainTableProps> = ({
                 </div>
 
                 <div className="w-full pt-2 border-t border-white/10 mb-2">
-                   {renderKeyboard((card) => onAddPlayerCard(index, card), isActiveHand && activeKeyboardZone === 'player')}
+                   {renderKeyboard((card) => onAddPlayerCard(index, card), isActiveHand && activeKeyboardZone === 'player', `player-${index}`)}
                 </div>
 
                 <div className="flex gap-2 mt-auto pt-2">

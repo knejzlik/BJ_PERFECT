@@ -20,6 +20,13 @@ export interface GameOptions {
   allowBetSkipping: boolean;
 }
 
+export interface HistoryItem {
+  id: string;
+  card: Card;
+  zone: 'dealer' | 'player' | 'discard';
+  handIndex?: number;
+}
+
 export interface Hand {
   cards: Card[];
   bet: number;
